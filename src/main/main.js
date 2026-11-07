@@ -9,7 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const {
   app, BrowserWindow, session, ipcMain, dialog, powerMonitor,
-  globalShortcut, safeStorage, shell,
+  globalShortcut, safeStorage, shell, screen,
 } = require('electron');
 
 // Packaged builds load the native runtime from resources/smartspectra/,
@@ -35,10 +35,58 @@ app.setName('SOVA');
 let win = null;
 let store = null;
 let native = null;
+let widget = null;
+let widgetHiddenByUser = false;
 const RENDERER_INDEX = path.join(__dirname, '..', 'renderer', 'index.html');
 
 function isOwnPage(url) {
   return typeof url === 'string' && url.startsWith('file://') && url.includes('/src/renderer/index.html');
+}
+
+function isWidgetPage(url) {
+  return typeof url === 'string' && url.startsWith('file://') && url.includes('/src/renderer/widget.html');
+}
+
+// ---- Floating focus widget --------------------------------------------------
+
+function showWidget() {
+  if (widgetHiddenByUser) return;
+  if (widget && !widget.isDestroyed()) { widget.showInactive(); return; }
+  const area = screen.getPrimaryDisplay().workArea;
+  const W = 340, H = 168;
+  widget = new BrowserWindow({
+    title: 'SOVA',
+    width: W,
+    height: H,
+    x: area.x + area.width - W - 24,
+    y: area.y + area.height - H - 24,
+    frame: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    show: false,
+    backgroundColor: '#121A2B',
+    webPreferences: {
+      preload: path.join(__dirname, '..', 'preload', 'widget-preload.js'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+    },
+  });
+  widget.setAlwaysOnTop(true, 'floating');
+  widget.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  widget.webContents.on('will-navigate', (e) => e.preventDefault());
+  widget.once('ready-to-show', () => widget.showInactive());
+  widget.on('closed', () => { widget = null; });
+  widget.loadFile(path.join(__dirname, '..', 'renderer', 'widget.html'));
+}
+
+function hideWidget() {
+  if (widget && !widget.isDestroyed()) widget.close();
+  widget = null;
 }
 
 function createWindow() {
@@ -60,7 +108,7 @@ function createWindow() {
 
   bindSmartSpectraIpc(win);
   native = new NativeMeasurement(win.webContents);
-  win.on('closed', () => { if (native) native.destroy(); native = null; win = null; });
+  win.on('closed', () => { if (native) native.destroy(); native = null; win = null; hideWidget(); });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     // External links (privacy policy, docs) open in the user's browser.
@@ -159,6 +207,25 @@ function registerIpc() {
   handle('sova:native:restart', (size) => safe(() => native.restart(size)));
   handle('sova:native:destroy', () => safe(() => native.destroy()));
   handle('sova:native:cameras', () => NativeMeasurement.cameras());
+
+  // Widget: the main window drives it; the widget sends back actions.
+  handle('sova:widget:show', () => { widgetHiddenByUser = false; showWidget(); return true; });
+  handle('sova:widget:hide', () => { hideWidget(); return true; });
+  ipcMain.on('sova:widget:update', (event, state) => {
+    if (!isOwnPage(event.senderFrame && event.senderFrame.url)) return;
+    if (widget && !widget.isDestroyed()) widget.webContents.send('sova:widget:state', state);
+  });
+  ipcMain.on('sova:widget:action', (event, action) => {
+    if (!isWidgetPage(event.senderFrame && event.senderFrame.url)) return;
+    if (action === 'hide') { widgetHiddenByUser = true; hideWidget(); return; }
+    if (!win) return;
+    if (action === 'open' || action === 'reset') {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    }
+    if (action === 'reset' || action === 'pause') win.webContents.send('sova:widget:action', action);
+  });
 }
 
 app.whenReady().then(() => {

@@ -36,6 +36,16 @@ contextBridge.exposeInMainWorld('sova', {
       return () => ipcRenderer.removeListener('sova:native:event', listener);
     },
   },
+  widget: {
+    show: invoke('sova:widget:show'),
+    hide: invoke('sova:widget:hide'),
+    update: (state) => ipcRenderer.send('sova:widget:update', state),
+    onAction: (fn) => {
+      const listener = (_e, action) => fn(action);
+      ipcRenderer.on('sova:widget:action', listener);
+      return () => ipcRenderer.removeListener('sova:widget:action', listener);
+    },
+  },
   onQuickReset: (fn) => {
     const listener = () => fn();
     ipcRenderer.on('sova:shortcut:quick-reset', listener);

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">
+  <title>SOVA widget</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #121A2B; color: #E6ECF5; font-family: "Inter", "Segoe UI", system-ui, sans-serif; overflow: hidden; user-select: none; }
+    .card { height: 100%; border: 1px solid #33415C; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; -webkit-app-region: drag; }
+    .top { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+    .brand { font-weight: 700; letter-spacing: 2px; color: #9AA6BC; }
+    .cam { display: flex; align-items: center; gap: 6px; color: #C5CEDD; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #7FA6E8; }
+    .dot.warn { background: #E6B980; }
+    .mid { display: flex; align-items: center; gap: 12px; }
+    .clock { font-family: "Space Grotesk", "Segoe UI", sans-serif; font-size: 34px; font-weight: 600; min-width: 96px; }
+    .live { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .sub { font-size: 12px; color: #9AA6BC; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    canvas { width: 100%; height: 24px; display: block; }
+    .row { display: flex; gap: 6px; -webkit-app-region: no-drag; }
+    button { min-height: 36px; border-radius: 999px; border: 1px solid #33415C; background: transparent; color: #E6ECF5; font: 500 13px inherit; font-family: inherit; cursor: pointer; padding: 0 12px; }
+    button.primary { flex: 1; background: #7FA6E8; color: #0B1220; border: none; font-weight: 600; }
+    button:focus-visible { outline: 2px solid #7FA6E8; outline-offset: 2px; }
+    .x { min-height: 22px; width: 22px; padding: 0; border: none; color: #9AA6BC; -webkit-app-region: no-drag; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="top">
+      <span class="brand" id="title">SOVA</span>
+      <span class="cam"><span class="dot" id="cam-dot"></span><span id="cam-text">Camera on</span>
+        <button class="x" id="hide" aria-label="Hide widget for this session" title="Hide for this session">×</button></span>
+    </div>
+    <div class="mid">
+      <span class="clock" id="clock">--:--</span>
+      <div class="live">
+        <canvas id="trace" width="300" height="48" aria-hidden="true"></canvas>
+        <span class="sub" id="sub" aria-live="polite">Waiting for a reading</span>
+      </div>
+    </div>
+    <div class="row">
+      <button class="primary" id="reset">Quick reset</button>
+      <button id="pause" aria-label="Pause session">Pause</button>
+      <button id="open" aria-label="Open SOVA">Open</button>
+    </div>
+  </div>
+  <script src="./widget.js"></script>
+</body>
+</html>

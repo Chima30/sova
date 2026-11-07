@@ -11,6 +11,8 @@ const { Baseline } = require('../../shared/core/baseline');
 const { CueEngine, inQuietHours } = require('../../shared/core/cueEngine');
 const { SessionEngine, formatClock } = require('../../shared/core/sessionEngine');
 const { openReset, openEyeRest } = require('./reset');
+const { applyOverrides } = require('../../shared/core/overrides');
+const audio = require('./audio');
 
 const SUPPRESSION_TEXT = {
   'not-focus': 'Cues rest during breaks',
@@ -26,6 +28,10 @@ const RING_C = 2 * Math.PI * 130;
 
 class LiveSession {
   constructor({ config, settings, preset, apiKey, onEnd }) {
+    // Personal sensitivity settings are applied on top of the shared config.
+    const eff = applyOverrides(config, preset, settings.cueOverrides);
+    config = eff.config;
+    preset = eff.preset;
     this.config = config;
     this.settings = settings;
     this.preset = preset;
@@ -99,7 +105,13 @@ class LiveSession {
     this.timer = setInterval(() => this.tick(), 1000);
     this.onOffline = () => this.fallbackToTimer('You went offline, so live readings stopped. The timer keeps running.');
     window.addEventListener('offline', this.onOffline);
-    if (!this.measurement) return;
+    if (!this.measurement) {
+      this.log('session-start', { mode: this.mode });
+      this.log('block-start', { block: 1 });
+      this.openWidget();
+      this.startSound();
+      return;
+    }
     // Direct (native) capture: show a framing preview first; the SDK takes
     // the camera when the user presses Start. Window capture: start now.
     if (this.measurement.native) await this.openFramingPreview();
@@ -142,6 +154,9 @@ class LiveSession {
     this.phaseUi = 'running';
     this.baselineStart = null;   // set by the first steady breathing reading
     this.log('session-start', { mode: this.mode });
+    this.log('block-start', { block: 1 });
+    this.openWidget();
+    this.startSound();
     this.render();
     announce('Focus session started');
     if (this.measurement && this.measurement.native) {
@@ -299,15 +314,39 @@ class LiveSession {
     // Away pause.
     const away = live && this.cue.isAway(t);
     if (away && !this.awayFlag) { this.awayFlag = true; this.engine.pause('away'); this.log('away'); }
-    if (!away && this.awayFlag) { this.awayFlag = false; this.engine.resume('away'); }
+    if (!away && this.awayFlag) { this.awayFlag = false; this.engine.resume('away'); this.log('away-end'); }
 
     // Meeting (talking detection or manual).
     const meeting = this.cue.inMeeting(t);
     if (meeting && !this.inMeetingFlag) this.log('meeting', { manual: this.cue.manualMeeting });
+    if (!meeting && this.inMeetingFlag) this.log('meeting-end');
     this.inMeetingFlag = meeting;
 
     const inFocus = this.engine.phase === 'focus' && !this.engine.paused;
     this.cue.tickScreen(t, inFocus);
+
+    // Calibration reminder: signal needs attention for a full minute.
+    if (live && this.validation && !this.validation.ok && this.validation.name !== 'kNoFaceFound') {
+      if (this.notOkSince == null) this.notOkSince = t;
+      if (t - this.notOkSince >= 60 && (this.lastQualityToast == null || t - this.lastQualityToast >= 600)) {
+        this.lastQualityToast = t;
+        this.log('quality-reminder', { code: this.validation.name });
+        toast({ title: 'Your signal needs attention', body: this.validation.tip, actions: [{ label: 'OK' }] });
+      }
+    } else {
+      this.notOkSince = null;
+    }
+
+    // Every 30 s in focus: a tension sample for the timeline and patterns.
+    // Only usable readings compared with a reliable baseline are recorded.
+    if (live && inFocus && this.baselineResult && this.baselineResult.reliable && (this.lastSampleAt == null || t - this.lastSampleAt >= 30)) {
+      const snap = this.usableSnapshot();
+      const kinds = ['breathing', 'pulse', 'hrv'].filter((k) => snap[k] != null && this.cue.isTense(k, snap[k]) !== null);
+      if (kinds.length) {
+        this.lastSampleAt = t;
+        this.log('sample', { tense: kinds.some((k) => this.cue.isTense(k, snap[k])), breathing: snap.breathing, pulse: snap.pulse, hrv: snap.hrv });
+      }
+    }
 
     const transition = this.engine.tick(dt);
     if (transition) this.onTransition(transition);
@@ -335,6 +374,63 @@ class LiveSession {
     }
 
     this.renderRunning();
+    this.updateWidget();
+  }
+
+  // ---- floating widget ------------------------------------------------------
+
+  startSound() {
+    if (!this.settings.autoSound || !this.preset.sound || this.preset.sound === 'none') return;
+    audio.ambient.start(this.preset.sound, this.settings.soundVolume);
+    this.soundStarted = true;
+  }
+
+  openWidget() {
+    if (this.settings.showWidget === false || !window.sova.widget) return;
+    window.sova.widget.show();
+    this.offWidget = window.sova.widget.onAction((a) => {
+      if (this.ended) return;
+      if (a === 'reset' && $('#overlay').hidden) this.startReset();
+      if (a === 'pause') {
+        if (this.engine.pauses.has('manual')) { this.engine.resume('manual'); this.log('resume'); }
+        else { this.engine.pause('manual'); this.log('pause'); }
+        this.renderRunning();
+        this.updateWidget();
+      }
+    });
+    this.updateWidget();
+  }
+
+  updateWidget() {
+    if (this.settings.showWidget === false || !window.sova.widget || this.phaseUi !== 'running') return;
+    const e = this.engine;
+    const snap = this.usableSnapshot();
+    let line;
+    if (e.paused) line = e.pauses.has('away') ? 'Paused: you stepped away' : 'Paused';
+    else if (e.phase === 'break') line = 'Break: step away from the screen';
+    else if (this.mode !== 'live') line = 'Focus · timer only';
+    else if (this.cameraPaused) line = 'Focus · camera paused';
+    else if (snap.breathing != null) line = `Breathing ${Math.round(snap.breathing)} /min${this.cue.inMeeting(now()) ? ' · meeting' : ''}`;
+    else if (snap.pulse != null) line = `Pulse ${Math.round(snap.pulse)} bpm`;
+    else line = 'Waiting for a steady signal';
+    const pts = this.recentTrace(15);
+    let trace = [];
+    if (pts.length >= 4) {
+      let min = Infinity, max = -Infinity;
+      for (const p of pts) { min = Math.min(min, p.value); max = Math.max(max, p.value); }
+      const span = max - min || 1;
+      const step = Math.max(1, Math.floor(pts.length / 60));
+      for (let i = 0; i < pts.length; i += step) trace.push((pts[i].value - min) / span);
+    }
+    window.sova.widget.update({
+      preset: this.preset.name,
+      clock: formatClock(e.remaining),
+      paused: e.paused,
+      live: this.mode === 'live',
+      cameraPaused: this.cameraPaused,
+      line,
+      trace,
+    });
   }
 
   onTransition(tr) {
@@ -342,8 +438,9 @@ class LiveSession {
       const mins = Math.round(tr.breakSeconds / 60);
       const why = tr.adaptive ? (tr.cues > 0 ? ' A little longer after a tense block.' : ' A little shorter after a calm block.') : '';
       toast({ title: `Break time: ${mins} min`, body: `Step away from the screen.${why}`, actions: [{ label: 'OK', primary: true }] });
-      this.log('break', { minutes: mins, adaptive: tr.adaptive });
+      this.log('break-start', { minutes: mins, adaptive: tr.adaptive });
     } else if (tr.next === 'focus') {
+      this.log('block-start', { block: tr.block });
       toast({ title: `Focus block ${tr.block} of ${this.preset.blocks}`, actions: [{ label: 'OK', primary: true }] });
     }
   }
@@ -438,12 +535,16 @@ class LiveSession {
     clearInterval(this.timer);
     clearTimeout(this.slowTimer);
     this.closeFramingPreview();
+    if (this.offWidget) this.offWidget();
+    if (this.soundStarted) audio.ambient.stop();
+    if (window.sova.widget) window.sova.widget.hide();
     window.removeEventListener('offline', this.onOffline);
     if (this.measurement) { await this.measurement.stop(); this.measurement.destroy(); }
     this.log('session-end', { completed });
     const record = {
       id: this.id,
       app: 'SOVA',
+      version: 2,
       presetId: this.preset.id,
       presetName: this.preset.name,
       startedAt: this.startedAtIso,
@@ -546,7 +647,7 @@ class LiveSession {
     $('#meeting').addEventListener('click', () => { this.cue.setManualMeeting(!this.cue.manualMeeting); this.renderRunning(); });
     $('#reset').addEventListener('click', () => this.startReset());
     $('#eyes').addEventListener('click', () => this.startEyeRest());
-    $('#skip').addEventListener('click', () => { const tr = this.engine.skipPhase(); if (tr) this.onTransition(tr); if (this.engine.done) this.end(true); else this.renderRunning(); });
+    $('#skip').addEventListener('click', () => { if (this.engine.phase === 'break') this.log('break-skipped'); const tr = this.engine.skipPhase(); if (tr) this.onTransition(tr); if (this.engine.done) this.end(true); else this.renderRunning(); });
     $('#end').addEventListener('click', () => this.end(false));
     const cam = $('#cam-toggle');
     if (cam) cam.addEventListener('click', () => this.toggleCamera());

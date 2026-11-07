@@ -53,6 +53,7 @@ class CueEngine {
   }
 
   addTalking(detected, t) {
+    if (this.cfg.smartPauses.autoMeeting === false) return;
     this.talk.push({ t, detected });
     const w = this.cfg.smartPauses.meetingTalkingWindowSeconds;
     while (this.talk.length && this.talk[0].t < t - w) this.talk.shift();
@@ -118,7 +119,7 @@ class CueEngine {
   // Returns 'tension' | 'eye-rest' | null.
   evaluate(t, ctx) {
     if (this.suppression(t, ctx)) return null;
-    if (this.tensionDue(t)) return 'tension';
+    if (this.cfg.cues.tensionEnabled !== false && this.tensionDue(t)) return 'tension';
     if (this.eyeRestDue(t)) return 'eye-rest';
     return null;
   }
@@ -133,6 +134,7 @@ class CueEngine {
   }
 
   eyeRestDue(t) {
+    if (this.cfg.cues.eyeRestEnabled === false) return false;
     const every = (this.preset && this.preset.eyeRestEveryMinutes) || this.cfg.cues.eyeRest.minScreenMinutes;
     const mins = this.screenSeconds / 60;
     if (mins < every) return false;

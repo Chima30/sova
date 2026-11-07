@@ -182,3 +182,27 @@ test('baseline is reliable from pulse alone when breathing is too weak', () => {
   assert.equal(f.breathing.reliable, false);
   assert.equal(f.pulse.reliable, true);
 });
+
+const { applyOverrides, cleanOverrides } = require('../shared/core/overrides');
+
+test('personal overrides are clamped and applied without touching the shared config', () => {
+  const { config: c, preset: p } = applyOverrides(config, preset, { breathingRisePct: 5, pulseRiseBpm: 12, windowMinutes: 2, eyeRestEveryMinutes: 45, tensionCues: false });
+  assert.equal(c.cues.tension.breathingRisePct, 10, 'clamped to the minimum');
+  assert.equal(c.cues.tension.pulseRiseBpm, 12);
+  assert.equal(c.cues.tension.windowSeconds, 120);
+  assert.equal(p.eyeRestEveryMinutes, 45);
+  assert.equal(config.cues.tension.breathingRisePct, 20, 'shared config unchanged');
+  assert.equal(cleanOverrides({ pulseRiseBpm: 'abc' }).pulseRiseBpm, null);
+
+  const e = new CueEngine(c, 'standard', p);
+  e.setBaseline({ reliable: true, breathing: { value: 12, reliable: true }, pulse: { value: 70, reliable: true } });
+  for (let t = 0; t <= 200; t += 2) e.addUsable('breathing', 20, t);
+  assert.equal(e.evaluate(200, { inFocus: true, quietHours: false }), null, 'tension cues switched off');
+});
+
+test('automatic meeting snooze can be switched off', () => {
+  const { config: c } = applyOverrides(config, preset, { autoMeetingSnooze: false });
+  const e = new CueEngine(c, 'standard', preset);
+  for (let t = 0; t <= 20; t += 1) e.addTalking(true, t);
+  assert.equal(e.inMeeting(20), false);
+});

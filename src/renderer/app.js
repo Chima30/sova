@@ -6,6 +6,10 @@ const { $, $$, esc, toast, announce, fmtDate, fmtMinutes } = require('./dom');
 const { LiveSession } = require('./session');
 const { openReset, openEyeRest } = require('./reset');
 const { breathsPerMinute, validatePattern } = require('../../shared/core/breathing');
+const { weekly, beforeAfter, patterns } = require('../../shared/core/insights');
+const { renderTimeline } = require('./timeline');
+const audio = require('./audio');
+const { cleanOverrides, LIMITS } = require('../../shared/core/overrides');
 
 const PRIVACY_POLICY = 'https://api.physiology.presagetech.com/privacypolicy';
 const KEY_PORTAL = 'https://physiology.presagetech.com/auth/register';
@@ -195,6 +199,7 @@ function showSummary(record) {
           <p class="small">"Not shown" means the signal was not reliable enough at that moment.</p>`
         : '<p class="small">No reset had reliable readings both before and 60 seconds after, so there is nothing to compare.</p>'}
       </section>` : '<p class="small">This session ran as a plain timer, so there are no signal readings.</p>'}
+      <section class="card stack"><h2 style="margin: 0">Timeline</h2>${renderTimeline(record)}</section>
       <div class="row"><button class="btn primary" id="again">Start another session</button><button class="btn" id="hist">Go to History</button></div>
     </div>`;
   $('#again').addEventListener('click', () => go('focus'));
@@ -296,35 +301,84 @@ const VIEWS = {
 
   async insights() {
     const sessions = await window.sova.listSessions();
-    const live = sessions.filter((s) => s.mode === 'live');
-    const need = 7;
+    const w = weekly(sessions);
+    const ba = beforeAfter(sessions);
+    const pat = patterns(sessions);
+    const maxDay = Math.max(1, ...w.days.map((d) => d.focusMinutes));
+    const pick = state.insightSession && sessions.find((s) => s.id === state.insightSession) || sessions[0];
+    const SIG = { breathing: ['Breathing', 'breaths/min'], pulse: ['Pulse', 'bpm'], hrv: ['HRV (RMSSD)', 'ms'] };
     $('#view').innerHTML = `
       <h1>Insights</h1>
-      <p class="lead">Built only from your stored sessions.</p>
-      <section class="card stack" style="max-width: 640px">
-        <h2 style="margin: 0">Personal patterns</h2>
-        ${live.length < need ? `<p style="margin: 0">Not enough sessions yet. SOVA needs ${need} sessions with live readings before it shows patterns.</p>
-          <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${need}" aria-valuenow="${live.length}"><div style="width: ${Math.round((live.length / need) * 100)}%"></div></div>
-          <span class="small">${live.length} of ${need} sessions recorded</span>`
-        : '<p style="margin: 0">Pattern discovery and the focus timeline replay arrive in the next build. Your sessions are already stored for them.</p>'}
-      </section>`;
+      <p class="lead">Built only from sessions stored on this computer. Nothing here is estimated.</p>
+      <div class="stack">
+        <section class="card stack">
+          <h2 style="margin: 0">Focus timeline replay</h2>
+          ${sessions.length ? `
+          <label class="field" style="justify-content: flex-start; gap: 12px">Session
+            <select id="tl-pick">${sessions.slice(0, 30).map((s) => `<option value="${esc(s.id)}" ${pick && s.id === pick.id ? 'selected' : ''}>${esc(fmtDate(s.startedAt))} · ${esc(s.presetName)} · ${esc(fmtMinutes(s.focusSeconds))}</option>`).join('')}</select></label>
+          <div id="tl">${renderTimeline(pick)}</div>` : '<p class="small" style="margin: 0">No sessions yet. Your first session will appear here.</p>'}
+        </section>
+
+        <section class="card stack">
+          <h2 style="margin: 0">This week</h2>
+          <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: end; height: 120px" role="img" aria-label="Focus minutes per day this week">
+            ${w.days.map((d) => `<div style="display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end">
+              <span class="small">${d.focusMinutes || ''}</span>
+              <div style="width: 100%; max-width: 44px; height: ${Math.round((d.focusMinutes / maxDay) * 70)}px; min-height: 3px; border-radius: 6px 6px 2px 2px; background: ${d.focusMinutes ? '#7FA6E8' : '#25314A'}"></div>
+              <span class="small">${esc(d.label)}</span></div>`).join('')}
+          </div>
+          <div class="grid">
+            <div><div class="num" style="font-size: 24px">${esc(fmtMinutes(w.focusMinutes * 60))}</div><div class="small">Focus time</div></div>
+            <div><div class="num" style="font-size: 24px">${w.sessions}</div><div class="small">Sessions</div></div>
+            <div><div class="num" style="font-size: 24px">${w.breaksTaken}${w.breaksStarted ? ` of ${w.breaksStarted}` : ''}</div><div class="small">Breaks taken</div></div>
+            <div><div class="num" style="font-size: 24px">${w.eyeRests}</div><div class="small">Eye rests taken</div></div>
+            <div><div class="num" style="font-size: 24px">${w.resets}</div><div class="small">Resets attempted</div></div>
+          </div>
+          <span class="small">No streaks. Rest days are part of the rhythm.</span>
+        </section>
+
+        <section class="card stack">
+          <h2 style="margin: 0">Before and after resets</h2>
+          <p class="small" style="margin: 0">Average of resets where the signal was reliable just before and 60 seconds after.</p>
+          ${Object.entries(ba).map(([k, r]) => `<div class="row" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px">
+            <span>${SIG[k][0]}</span>
+            ${r.enough
+              ? `<span><strong>${r.before.toFixed(1)} → ${r.after.toFixed(1)}</strong> <span class="small">${SIG[k][1]} · lower in ${r.lowerAfter} of ${r.n}</span></span>`
+              : `<span class="small">Not enough reliable resets yet (${r.n} of ${r.need})</span>`}
+          </div>`).join('')}
+        </section>
+
+        <section class="card stack">
+          <h2 style="margin: 0">Personal patterns</h2>
+          ${!pat.enough ? `<p style="margin: 0">Not enough sessions yet. SOVA needs ${pat.need} sessions with live readings before it looks for patterns.</p>
+            <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${pat.need}" aria-valuenow="${pat.have}"><div style="width: ${Math.round((pat.have / pat.need) * 100)}%"></div></div>
+            <span class="small">${pat.have} of ${pat.need} sessions recorded</span>`
+          : pat.observations.length ? `<ul class="list">${pat.observations.map((o) => `<li><span class="dot" style="margin-top: 7px"></span><span>${esc(o.text)}</span></li>`).join('')}</ul>
+            <p class="small" style="margin: 0">Observations from your own sessions, not advice or a diagnosis.</p>`
+          : '<p style="margin: 0">No clear patterns yet. SOVA only reports one when your sessions show it consistently.</p>'}
+        </section>
+      </div>`;
+    const tp = $('#tl-pick');
+    if (tp) tp.addEventListener('change', () => {
+      state.insightSession = tp.value;
+      $('#tl').innerHTML = renderTimeline(sessions.find((s) => s.id === tp.value));
+    });
   },
 
   async history() {
     const sessions = await window.sova.listSessions();
-    const weekAgo = Date.now() - 7 * 864e5;
-    const week = sessions.filter((s) => Date.parse(s.startedAt) >= weekAgo);
-    const sum = (type) => week.reduce((n, s) => n + countEvents(s, type), 0);
+    const w = weekly(sessions);
     $('#view').innerHTML = `
       <h1>History</h1>
       <p class="lead">Your sessions, stored only on this computer.</p>
       <section class="card stack" style="margin-bottom: 18px">
-        <h2 style="margin: 0">This week</h2>
+        <h2 style="margin: 0">Consistency this week</h2>
         <div class="grid">
-          <div><div class="num" style="font-size: 26px">${week.length}</div><div class="small">Sessions</div></div>
-          <div><div class="num" style="font-size: 26px">${sum('eye-rest')}</div><div class="small">Eye rests taken</div></div>
-          <div><div class="num" style="font-size: 26px">${sum('reset')}</div><div class="small">Resets attempted</div></div>
-          <div><div class="num" style="font-size: 26px">${week.reduce((n, s) => n + (s.blocksCompleted || 0), 0)}</div><div class="small">Focus blocks finished</div></div>
+          <div><div class="num" style="font-size: 26px">${w.sessions}</div><div class="small">Sessions</div></div>
+          <div><div class="num" style="font-size: 26px">${w.eyeRests}</div><div class="small">Eye rests taken</div></div>
+          <div><div class="num" style="font-size: 26px">${w.breaksTaken}${w.breaksStarted ? ` of ${w.breaksStarted}` : ''}</div><div class="small">Breaks taken</div></div>
+          <div><div class="num" style="font-size: 26px">${w.resets}</div><div class="small">Resets attempted</div></div>
+          <div><div class="num" style="font-size: 26px">${w.blocksFinished}</div><div class="small">Focus blocks finished</div></div>
         </div>
         <span class="small">No streaks. Rest days are part of the rhythm.</span>
       </section>
@@ -341,16 +395,51 @@ const VIEWS = {
   },
 
   sounds() {
+    const s = state.settings;
+    const SOUNDS = [['rain', 'Rain'], ['forest', 'Forest'], ['noise', 'Soft noise'], ['ambient', 'Ambient']];
+    const playing = audio.ambient.current;
+    const presetSounds = state.config.presets.filter((p) => p.sound && p.sound !== 'none')
+      .map((p) => `${p.name}: ${(SOUNDS.find((x) => x[0] === p.sound) || [0, p.sound])[1]}`).join(' · ');
     $('#view').innerHTML = `
       <h1>Sounds</h1>
-      <p class="lead">Ambient focus sounds (rain, forest, soft noise) are planned for a later build and will play offline.</p>
-      <section class="card small" style="max-width: 640px">Available now: the sound guide for eyes-closed breathing (Recovery) and the eye-rest chime.</section>`;
+      <p class="lead">Ambient sounds for focus. Generated on this computer, so they work offline.</p>
+      <section class="card stack" style="max-width: 720px">
+        <div class="row" role="radiogroup" aria-label="Ambient sound">
+          ${SOUNDS.map(([id, name]) => `<button class="chip" role="radio" aria-checked="${s.soundId === id}" data-snd="${id}">${name}</button>`).join('')}
+        </div>
+        <label class="stack" style="gap: 6px; font-size: 14px">Volume
+          <input type="range" id="vol" min="0" max="1" step="0.05" value="${s.soundVolume}" style="accent-color: var(--accent)"></label>
+        <div class="row">
+          <button class="btn primary" id="play">${playing ? 'Stop' : 'Play'}</button>
+          <span class="small" id="now">${playing ? `Playing ${esc((SOUNDS.find((x) => x[0] === playing) || [0, playing])[1])}` : ''}</span>
+        </div>
+      </section>
+      <div class="spacer"></div>
+      <section class="card stack" style="max-width: 720px">
+        <label class="field">Play each preset's sound when a session starts <input type="checkbox" id="auto" ${s.autoSound ? 'checked' : ''}></label>
+        <p class="small" style="margin: 0">${esc(presetSounds)}. Other presets stay silent.</p>
+      </section>`;
+    $$('[data-snd]').forEach((b) => b.addEventListener('click', async () => {
+      await saveSettings({ soundId: b.dataset.snd });
+      if (audio.ambient.current) audio.ambient.start(b.dataset.snd, state.settings.soundVolume);
+      VIEWS.sounds();
+    }));
+    $('#vol').addEventListener('input', (e) => audio.ambient.setVolume(Number(e.target.value)));
+    $('#vol').addEventListener('change', (e) => saveSettings({ soundVolume: Number(e.target.value) }));
+    $('#play').addEventListener('click', () => {
+      if (audio.ambient.current) audio.ambient.stop();
+      else audio.ambient.start(state.settings.soundId, state.settings.soundVolume);
+      VIEWS.sounds();
+    });
+    $('#auto').addEventListener('change', (e) => saveSettings({ autoSound: e.target.checked }));
   },
 
   async settings() {
     const s = state.settings;
     const sum = await window.sova.dataSummary();
     const cameras = await window.sova.native.cameras().catch(() => []);
+    const config = state.config;
+    const ov = cleanOverrides(s.cueOverrides);
     $('#view').innerHTML = `
       <h1>Settings</h1>
       <div class="stack" style="max-width: 720px">
@@ -373,6 +462,7 @@ const VIEWS = {
               <option value="renderer" ${s.captureMode === 'renderer' ? 'selected' : ''}>Through the window (shows a preview)</option>
             </select></label>
           <p class="small" style="margin: 0">If the signal check keeps saying the camera is too slow, add light in front of you and keep Direct mode.</p>
+          <label class="field">Show the floating focus widget during sessions <input type="checkbox" id="widget" ${s.showWidget !== false ? 'checked' : ''}></label>
         </section>
 
         <section class="card stack">
@@ -380,6 +470,22 @@ const VIEWS = {
           <label class="field">Cue sensitivity
             <select id="sens"><option value="">Use each preset's setting</option>
               ${Object.entries(state.config.sensitivity).map(([k, v]) => `<option value="${k}" ${s.sensitivity === k ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></label>
+          <details class="stack" style="gap: 10px" ${Object.values(s.cueOverrides || {}).some((v) => v !== null && v !== true) ? 'open' : ''}>
+            <summary style="cursor: pointer; min-height: 32px">Fine-tune cues</summary>
+            ${[
+              ['breathingRisePct', 'Breathing rise before a cue', '%', config.cues.tension.breathingRisePct],
+              ['pulseRiseBpm', 'Pulse rise before a cue', 'bpm', config.cues.tension.pulseRiseBpm],
+              ['hrvDropPct', 'HRV drop before a cue', '%', config.cues.tension.hrvDropPct],
+              ['windowMinutes', 'How long the change must last', 'min', config.cues.tension.windowSeconds / 60],
+              ['cooldownMinutes', 'Minimum time between cues', 'min', config.cues.cooldownMinutes],
+              ['eyeRestEveryMinutes', 'Eye-rest reminder every', 'min', null],
+            ].map(([k, label, unit, def]) => `<label class="field">${label}
+              <span class="row" style="gap: 8px"><input type="number" data-ov="${k}" min="${LIMITS[k][0]}" max="${LIMITS[k][1]}" value="${ov[k] ?? ''}" placeholder="${def ?? 'preset'}" style="width: 90px; background: var(--ground); border: 1px solid var(--border-strong); border-radius: 10px; min-height: 40px; padding: 0 8px"><span class="small" style="width: 30px">${unit}</span></span></label>`).join('')}
+            <label class="field">Tension cues <input type="checkbox" data-ovb="tensionCues" ${ov.tensionCues ? 'checked' : ''}></label>
+            <label class="field">Eye-rest reminders <input type="checkbox" data-ovb="eyeRestCues" ${ov.eyeRestCues ? 'checked' : ''}></label>
+            <label class="field">Automatic meeting snooze (talking detection) <input type="checkbox" data-ovb="autoMeetingSnooze" ${ov.autoMeetingSnooze ? 'checked' : ''}></label>
+            <div class="row"><button class="btn" id="ov-reset">Reset to defaults</button><span class="small">Empty fields use SOVA's defaults. Values outside the safe range are adjusted.</span></div>
+          </details>
           <label class="field">Quiet hours <input type="checkbox" id="qh-on" ${s.quietHours.enabled ? 'checked' : ''}></label>
           <div class="row"><label class="field" style="gap: 8px">From <input type="time" id="qh-start" value="${esc(s.quietHours.start)}"></label>
             <label class="field" style="gap: 8px">To <input type="time" id="qh-end" value="${esc(s.quietHours.end)}"></label></div>
@@ -418,6 +524,17 @@ const VIEWS = {
     const keyClear = $('#key-clear');
     if (keyClear) keyClear.addEventListener('click', async () => { await window.sova.clearApiKey(); state.settings = await window.sova.getSettings(); VIEWS.settings(); });
 
+    const saveOv = async () => {
+      const next = {};
+      $$('[data-ov]').forEach((i) => { next[i.dataset.ov] = i.value === '' ? null : Number(i.value); });
+      $$('[data-ovb]').forEach((i) => { next[i.dataset.ovb] = i.checked; });
+      const clean = cleanOverrides(next);
+      await saveSettings({ cueOverrides: clean });
+      $$('[data-ov]').forEach((i) => { i.value = clean[i.dataset.ov] ?? ''; });
+    };
+    $$('[data-ov], [data-ovb]').forEach((i) => i.addEventListener('change', saveOv));
+    $('#ov-reset').addEventListener('click', async () => { await saveSettings({ cueOverrides: {} }); VIEWS.settings(); });
+    $('#widget').addEventListener('change', (e) => saveSettings({ showWidget: e.target.checked }));
     $('#cam').addEventListener('change', (e) => saveSettings({ cameraId: e.target.value || null }));
     $('#capture').addEventListener('change', (e) => saveSettings({ captureMode: e.target.value }));
     $('#sens').addEventListener('change', (e) => saveSettings({ sensitivity: e.target.value || null }));

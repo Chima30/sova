@@ -17,6 +17,11 @@ const DEFAULT_SETTINGS = {
   breathingPatternId: 'calm-6',
   customPattern: { inhale: 4, hold: 0, exhale: 6, holdAfterExhale: 0 },
   theme: 'dark',
+  showWidget: true,
+  cueOverrides: {},            // personal sensitivity settings
+  autoSound: false,            // play the preset's ambient sound at session start
+  soundVolume: 0.4,
+  soundId: 'rain',
   captureMode: 'native',       // 'native' (main-process camera) or 'renderer'
   cameraId: null,              // null = system default camera
   encryptedApiKey: null,       // OS-encrypted via Electron safeStorage
@@ -26,7 +31,8 @@ const DEFAULT_SETTINGS = {
 const WRITABLE = new Set([
   'consentVersion', 'telemetry', 'presetId', 'sensitivity', 'quietHours',
   'reducedMotion', 'soundGuide', 'breathingPatternId', 'customPattern', 'theme',
-  'captureMode', 'cameraId',
+  'captureMode', 'cameraId', 'showWidget',
+  'cueOverrides', 'autoSound', 'soundVolume', 'soundId',
 ]);
 
 class Store {

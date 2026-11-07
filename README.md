@@ -8,26 +8,46 @@ SOVA is not a medical application, diagnostic tool, stress detector or productiv
 
 Built for the DEV Presage SmartSpectra SDK Challenge (#presagechallenge).
 
-## What works in this build (Phase 1, desktop)
+## What works in this build (desktop, Phases 1 and 2)
 
+**Sessions and signals**
 - First-run camera consent with a plain-language disclosure
-- Signal check using the SDK's live validation feedback (lighting, framing, motion)
-- Personal baseline from the first 2 minutes of each session, with a recalibrate option
+- Signal check with a framing preview, then the SDK's live validation feedback (lighting, framing, motion)
+- Direct camera capture in the main process at 30 fps, as Presage recommends, with an automatic 640x480 fallback and automatic reconnects for retryable SDK errors
+- Personal baseline from the first 2 minutes of steady signal (breathing or pulse), restarted after any interruption, with a recalibrate option
+- Calibration reminders when the signal needs attention for more than a minute
+
+**Focus**
 - Focus session presets: Deep Work, Studying, Reading, Creative Work, General Work
 - Pomodoro timer with adaptive breaks (longer after tense blocks, shorter after calm ones)
-- Tension cues when breathing, pulse or HRV stays away from your baseline for 3 minutes, shown at a pause in your typing
-- Breathing resets of 30 s, 60 s, 2 min or 5 min, with preset or custom patterns, live breath line against the target pace, and inhale:exhale coaching
-- Before-and-after values for each reset, recorded only when the signal is reliable
-- Eye-rest reminders from blink detection, falling back to a time reminder
-- Smart pauses: meeting snooze from talking detection, away pause when no face is seen for 1 minute, "I'm in flow" snooze, manual meeting pause, quiet hours
+- Floating focus widget: always on top, draggable, with the timer, live breath line, quick reset, pause and open
 - Quick reset shortcut from any app: Ctrl + Shift + B (Cmd + Shift + B on macOS)
-- End-of-session reflection (Calm, Productive, Distracted, Tired, Overwhelmed) and a session note
-- History with a weekly consistency summary (no streaks)
-- CSV and JSON export, delete all
-- Offline: timers, recovery exercises, history and settings work without internet; live readings need a connection
-- Reduced-motion breathing guide and an audio sound guide for eyes-closed breathing
+- Ambient sounds (rain, forest, soft noise, ambient), generated in the app so they work offline, optionally started by each preset
 
-Planned for the next builds: floating desktop widget, focus timeline replay, pattern discovery, ambient sounds, Android app. See the roadmap in the project spec.
+**Cues and smart pauses**
+- Tension cues when breathing, pulse or HRV stays away from your baseline, shown at a pause in your typing
+- Eye-rest reminders from blink detection, falling back to a time reminder
+- Meeting snooze from talking detection, away pause when no face is seen for 1 minute, "I'm in flow" snooze, manual meeting pause, quiet hours
+- Personal sensitivity settings: your own thresholds, detection window, time between cues, eye-rest rhythm, and an on/off switch per cue
+
+**Recovery**
+- Breathing sessions of 30 s, 60 s, 2 min or 5 min, with preset or custom patterns
+- Live breath line against the target pace, inhale:exhale coaching, sound guide for eyes-closed breathing
+- Before-and-after values for each reset, recorded only when the signal is reliable
+
+**Reflection and insights**
+- End-of-session reflection (Calm, Productive, Distracted, Tired, Overwhelmed) and session notes
+- Focus timeline replay: focus and break blocks, tense stretches, meeting, away and paused time, cues, resets and eye rests
+- Before-and-after averages across resets (needs 3 reliable resets)
+- Weekly reflection and consistency tracker without streaks
+- Personal pattern discovery after 7 live sessions, reporting only what the data shows consistently
+- CSV and JSON export, delete all
+
+**Everywhere**
+- Offline: timers, recovery, sounds, history and insights work without internet; live readings need a connection
+- Reduced-motion breathing guide, screen-reader announcements, keyboard access
+
+Planned next: Android app with the same shared rules and config.
 
 ## Requirements
 
@@ -113,11 +133,13 @@ SOVA does not use the SDK's `requestInsight` AI feature.
 
 ```
 shared/config/sova-config.json   presets, thresholds, windows, cooldowns, breathing patterns
-shared/core/                     platform-neutral engines (signals, baseline, cues, session, breathing, export)
-src/main/                        Electron main process and local store
+shared/core/                     platform-neutral engines (signals, baseline, cues, session, breathing,
+                                 insights, personal overrides, export)
+src/main/                        Electron main process, main-process SDK capture, local store
 src/preload/                     Presage preload bridge plus SOVA's API
 src/renderer/                    UI, SDK wrapper, session and reset screens
 test/                            unit tests for the shared core (npm test)
+test/smoke/                      Electron smoke test that clicks through the app (npm run smoke)
 ```
 
 The shared core holds every rule (confidence gating, baseline, cue timing, adaptive breaks) so the Android app can follow the same behaviour and the same config file.
