@@ -164,3 +164,11 @@ test('export writes empty cells for unreliable values and escapes notes', () => 
   const json = JSON.parse(toJSON(s, { theme: 'dark' }));
   assert.equal(json.app, 'SOVA');
 });
+
+test('skipped focus blocks do not count as finished', () => {
+  const s = new SessionEngine(config, preset);
+  s.skipPhase();             // skip block 1
+  s.skipPhase();             // skip the break
+  s.tick(preset.focusMinutes * 60); // block 2 runs to the end
+  assert.equal(s.finishedBlocks, 1);
+});

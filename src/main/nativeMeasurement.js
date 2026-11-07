@@ -67,7 +67,9 @@ class NativeMeasurement {
   }
 
   async start(opts) {
-    if (!this.sdk) this._build(opts);
+    // Every session gets a fresh SDK so nothing carries over from the last one.
+    if (this.sdk) await this.destroy();
+    this._build(opts);
     if (opts && opts.size) this.size = opts.size;
     this._useCamera();
     this.sdk.start();

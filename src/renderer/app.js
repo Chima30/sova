@@ -321,7 +321,7 @@ const VIEWS = {
       <section class="card stack" style="margin-bottom: 18px">
         <h2 style="margin: 0">This week</h2>
         <div class="grid">
-          <div><div class="num" style="font-size: 26px">${week.length}</div><div class="small">Sessions completed</div></div>
+          <div><div class="num" style="font-size: 26px">${week.length}</div><div class="small">Sessions</div></div>
           <div><div class="num" style="font-size: 26px">${sum('eye-rest')}</div><div class="small">Eye rests taken</div></div>
           <div><div class="num" style="font-size: 26px">${sum('reset')}</div><div class="small">Resets attempted</div></div>
           <div><div class="num" style="font-size: 26px">${week.reduce((n, s) => n + (s.blocksCompleted || 0), 0)}</div><div class="small">Focus blocks finished</div></div>

@@ -22,6 +22,9 @@ class SessionEngine {
   get paused() { return this.pauses.size > 0; }
   get done() { return this.phase === 'done'; }
 
+  // Focus blocks that ran to the end (skipped blocks don't count).
+  get finishedBlocks() { return this.log.filter((e) => e.type === 'block-end' && !e.skipped).length; }
+
   pause(reason) { this.pauses.add(reason); }
   resume(reason) { this.pauses.delete(reason); }
 
@@ -48,11 +51,11 @@ class SessionEngine {
     return mins * 60;
   }
 
-  skipPhase() { return this._advance(); }
+  skipPhase() { return this._advance(true); }
 
-  _advance() {
+  _advance(skipped = false) {
     if (this.phase === 'focus') {
-      const ev = { type: 'block-end', block: this.block, cues: this.blockCues };
+      const ev = { type: 'block-end', block: this.block, cues: this.blockCues, skipped };
       this.log.push(ev);
       if (this.block >= this.preset.blocks) {
         this.phase = 'done';

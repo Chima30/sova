@@ -99,21 +99,57 @@ class LiveSession {
     this.timer = setInterval(() => this.tick(), 1000);
     this.onOffline = () => this.fallbackToTimer('You went offline, so live readings stopped. The timer keeps running.');
     window.addEventListener('offline', this.onOffline);
-    if (this.measurement) {
-      try {
-        await this.measurement.start();
-      } catch (e) {
-        this.fallbackToTimer(e && e.message ? `Couldn't start the camera: ${e.message}` : "Couldn't start live readings.");
-      }
+    if (!this.measurement) return;
+    // Direct (native) capture: show a framing preview first; the SDK takes
+    // the camera when the user presses Start. Window capture: start now.
+    if (this.measurement.native) await this.openFramingPreview();
+    else await this.startMeasurement();
+  }
+
+  async startMeasurement() {
+    if (!this.measurement) return;
+    try {
+      await this.measurement.start();
+    } catch (e) {
+      if (e && e.retryable) return this.onError({ code: e.code, message: e.message, retryable: true, text: e.message });
+      this.fallbackToTimer(e && e.message ? `Couldn't start live readings: ${e.message}` : "Couldn't start live readings.");
     }
   }
 
-  startFocus() {
+  async openFramingPreview() {
+    try {
+      this.previewStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { width: { ideal: 640 }, height: { ideal: 480 } } });
+      const v = $('#preview');
+      if (v) { v.srcObject = this.previewStream; v.play().catch(() => {}); }
+      const tip = $('#quality-tip');
+      if (tip) tip.textContent = 'Center your face, light in front of you, chest in view. Then press Start.';
+      const dot = $('#quality-dot');
+      if (dot) dot.className = 'dot';
+    } catch (e) {
+      const tip = $('#quality-tip');
+      if (tip) tip.textContent = 'Preview unavailable. You can still start: SOVA will guide you with tips.';
+    }
+    const go = $('#check-start');
+    if (go) go.disabled = false;
+  }
+
+  closeFramingPreview() {
+    if (this.previewStream) { for (const t of this.previewStream.getTracks()) t.stop(); }
+    this.previewStream = null;
+  }
+
+  async startFocus() {
     this.phaseUi = 'running';
     this.baselineStart = null;   // set by the first steady breathing reading
     this.log('session-start', { mode: this.mode });
     this.render();
     announce('Focus session started');
+    if (this.measurement && this.measurement.native) {
+      this.closeFramingPreview();
+      // Give the camera driver a moment to release before the SDK opens it.
+      await new Promise((r) => setTimeout(r, 400));
+      await this.startMeasurement();
+    }
   }
 
   async fallbackToTimer(message) {
@@ -157,15 +193,18 @@ class LiveSession {
   }
 
   onError(e) {
-    if (e.code === 5) return this.fallbackToTimer(e.text);
-    if (e.code === 2 || e.code === 4 || e.code === 7) return this.fallbackToTimer(e.text);
+    if (e.code === 2 || e.code === 4) return this.fallbackToTimer(e.text);
+    if (!e.retryable && (e.code === 5 || e.code === 7)) return this.fallbackToTimer(e.text);
     // Retryable errors (the SDK says so): restart up to 3 times, the second
     // time in the lighter camera mode, then fall back to the plain timer.
     if (e.retryable && this.measurement) {
       this.restarts = (this.restarts || 0) + 1;
       this.log('sdk-restart', { code: e.code, attempt: this.restarts });
-      if (this.restarts > 3) return this.fallbackToTimer('Live processing kept stopping on this computer. The timer keeps running.');
-      return setTimeout(() => this.switchToLightCamera(this.restarts >= 2, true), 2000);
+      if (this.restarts > 3) return this.fallbackToTimer(e.code === 5 ? e.text : 'Live processing kept stopping on this computer. The timer keeps running.');
+      // Network and server errors: same camera mode, longer wait. Others: lighter mode on the 2nd try.
+      const net = e.code === 5 || e.code === 6;
+      if (this.restarts === 1) toast({ title: 'Reconnecting live readings', body: net ? 'Presage did not respond. Trying again.' : 'Restarting the camera pipeline.', actions: [{ label: 'OK' }] });
+      return setTimeout(() => this.switchToLightCamera(!net && this.restarts >= 2, true), net ? 4000 * this.restarts : 2000);
     }
     toast({ title: 'Live readings hit a problem', body: e.text, actions: [{ label: 'OK' }] });
   }
@@ -392,6 +431,7 @@ class LiveSession {
     this.ended = true;
     clearInterval(this.timer);
     clearTimeout(this.slowTimer);
+    this.closeFramingPreview();
     window.removeEventListener('offline', this.onOffline);
     if (this.measurement) { await this.measurement.stop(); this.measurement.destroy(); }
     this.log('session-end', { completed });
@@ -404,7 +444,7 @@ class LiveSession {
       endedAt: new Date().toISOString(),
       mode: this.mode,
       focusSeconds: Math.round(this.engine.completedFocusSeconds),
-      blocksCompleted: this.engine.log.filter((e) => e.type === 'block-end').length,
+      blocksCompleted: this.engine.finishedBlocks,
       blocksPlanned: this.preset.blocks,
       baseline: this.baselineResult,
       events: this.events,
@@ -425,20 +465,19 @@ class LiveSession {
       <h1>Signal check</h1>
       <p class="lead">Before ${esc(this.preset.name)} starts: device on a steady surface, even light on your face, no bright window behind you, face and chest in view. Stay still and avoid talking while SOVA reads your baseline.</p>
       <div class="card stack" style="align-items: center">
-        ${this.measurement && this.measurement.native
-          ? '<div class="preview" style="display: flex; align-items: center; justify-content: center; transform: none; color: var(--muted); text-align: center; padding: 20px">The camera is on. SOVA reads it directly for a steadier frame rate, so there is no preview. Follow the tip below.</div>'
-          : '<video id="preview" class="preview" autoplay playsinline muted aria-label="Camera preview, shown only during the signal check"></video>'}
+        <video id="preview" class="preview" autoplay playsinline muted aria-label="Camera preview, shown only during the signal check"></video>
         <div class="row"><span class="dot warn" id="quality-dot"></span><span id="quality-tip">Starting the camera</span></div>
         <div class="row">
           <button class="btn primary big" id="check-start" disabled>Start ${esc(this.preset.name)}</button>
-          <button class="btn" id="check-skip">Start anyway</button>
+          ${this.measurement && this.measurement.native ? '' : '<button class="btn" id="check-skip">Start anyway</button>'}
           <button class="btn" id="check-cancel">Cancel</button>
         </div>
         <p class="small">The video stays on this device and is never saved.</p>
       </div>`;
     $('#check-start').addEventListener('click', () => this.startFocus());
-    $('#check-skip').addEventListener('click', () => this.startFocus());
-    $('#check-cancel').addEventListener('click', () => this.end(false));
+    const skip = $('#check-skip');
+    if (skip) skip.addEventListener('click', () => this.startFocus());
+    $('#check-cancel').addEventListener('click', () => { this.closeFramingPreview(); this.end(false); });
     if (this.validation) this.onValidation(this.validation);
   }
 
