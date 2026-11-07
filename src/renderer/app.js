@@ -35,6 +35,23 @@ const SOUNDS = [
   ['ambient', 'Ambient', 'audio-lines', 'A slow, low drone with gentle movement'],
 ];
 
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+// Light, dark, or follow Windows. Applied before anything is drawn.
+function applyTheme() {
+  const a = (state.settings && state.settings.appearance) || 'system';
+  const t = a === 'system' ? (darkQuery.matches ? 'dark' : 'light') : a;
+  document.documentElement.dataset.theme = t;
+  const btn = $('#theme-btn');
+  if (btn) {
+    btn.innerHTML = icon(t === 'dark' ? 'sun' : 'moon', 16);
+    btn.setAttribute('aria-label', t === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    btn.title = btn.getAttribute('aria-label');
+  }
+  const s = liveSession();
+  if (s) s.updateWidget();
+}
+
 const state = {
   config: null, settings: null, view: 'home', session: null, selectedPreset: null,
   resetSeconds: 60, cleanup: null, mod: 'Ctrl',
@@ -44,8 +61,11 @@ const state = {
 // Boot
 
 async function boot() {
+  applyTheme();
+  darkQuery.addEventListener('change', applyTheme);
   state.config = await window.sova.config();
   state.settings = await window.sova.getSettings();
+  applyTheme();
   state.selectedPreset = state.settings.presetId;
   state.resetSeconds = state.config.defaultBreathingSeconds;
   applyMotion();
@@ -66,7 +86,7 @@ async function boot() {
     $('#splash').classList.add('fade');
     $('#app').hidden = false;
     setTimeout(() => { $('#splash').hidden = true; splash.stop(); }, 420);
-    if (state.settings.consentVersion < state.config.consentVersion) showConsent();
+    if (needsOnboarding()) startOnboarding();
     else go('home');
   }, 1400);
 }
@@ -96,6 +116,7 @@ async function saveSettings(patch) {
   await window.sova.setSettings(patch);
   state.settings = await window.sova.getSettings();
   applyMotion();
+  applyTheme();
   if (state.session && !state.session.ended) state.session.settings = { ...state.session.settings, ...patch };
 }
 
@@ -145,11 +166,21 @@ function setNavVisible(on) {
   $('#topbar-right').hidden = !on;
 }
 
-// Right side of the top bar: the running session, or camera state and the
-// quick-reset shortcut.
+// Right side of the top bar: the running session (or camera state and the
+// quick-reset shortcut), then the light/dark switch.
 function updateTopbar() {
   const el = $('#topbar-right');
   if (!el || el.hidden) return;
+  if (!$('#tb-status')) {
+    el.innerHTML = '<div class="row" id="tb-status"></div><button class="btn btn-quiet btn-icon" id="theme-btn"></button>';
+    $('#theme-btn').addEventListener('click', async () => {
+      const now = document.documentElement.dataset.theme;
+      await saveSettings({ appearance: now === 'dark' ? 'light' : 'dark' });
+      if (state.view === 'settings') VIEWS.settings();
+    });
+    applyTheme();
+  }
+  const box = $('#tb-status');
   const s = liveSession();
   if (s && s.phaseUi === 'running') {
     const e = s.engine;
@@ -161,14 +192,16 @@ function updateTopbar() {
       pill.querySelector('.mono').textContent = text;
       return;
     }
-    el.innerHTML = `<button class="session-pill" id="pill" aria-label="Back to the running session"><span class="dot ${live ? 'live' : 'off'}"></span><span>${esc(s.preset.name)}</span><span class="mono">${text}</span></button>`;
+    delete box.dataset.html;
+    box.innerHTML = `<button class="session-pill" id="pill" aria-label="Back to the running session"><span class="dot ${live ? 'live' : 'off'}"></span><span>${esc(s.preset.name)}</span><span class="mono">${text}</span></button>`;
     $('#pill').addEventListener('click', () => go('focus'));
     return;
   }
   const off = !navigator.onLine;
-  el.innerHTML = `
+  const html = `
     <span class="status t-small">${off ? '<span class="dot warn"></span>Offline' : `<span class="dot off"></span>${cameraAllowed() ? 'Camera off' : 'Timer only'}`}</span>
     <span class="row" style="gap: 4px" title="Quick breathing reset from anywhere"><span class="keycap">${state.mod}</span><span class="keycap">Shift</span><span class="keycap">B</span></span>`;
+  if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
 }
 
 // ---------------------------------------------------------------------------
@@ -219,17 +252,124 @@ function startOfToday() {
 }
 
 // ---------------------------------------------------------------------------
-// Consent
+// First launch: your name, what brings you here, then camera consent
 
-function showConsent() {
+function needsOnboarding() {
+  return !state.settings.onboarded || state.settings.consentVersion < state.config.consentVersion;
+}
+
+function startOnboarding({ profileOnly = false } = {}) {
+  const steps = [];
+  if (profileOnly || !state.settings.onboarded) steps.push('name', 'goals');
+  if (!profileOnly && state.settings.consentVersion < state.config.consentVersion && !state.timerOnly) steps.push('consent');
+  if (!steps.length) { setNavVisible(true); go('home'); return; }
+  state.ob = { steps, i: 0, profileOnly };
+  showStep();
+}
+
+function reviewConsent() {
+  state.timerOnly = false;
+  state.ob = { steps: ['consent'], i: 0 };
+  showStep();
+}
+
+function showStep() {
   cleanupView();
   setNavVisible(false);
-  state.view = 'consent';
+  state.view = 'onboarding';
+  setCurrent(null);
   enterView();
+  const step = state.ob.steps[state.ob.i];
+  if (step === 'name') nameStep();
+  else if (step === 'goals') goalsStep();
+  else showConsent();
+  const back = $('#ob-back');
+  if (back) back.addEventListener('click', () => { state.ob.i -= 1; showStep(); });
+}
+
+function nextStep() {
+  state.ob.i += 1;
+  if (state.ob.i < state.ob.steps.length) return showStep();
+  finishOnboarding();
+}
+
+function finishOnboarding() {
+  const wasProfileOnly = state.ob && state.ob.profileOnly;
+  state.ob = null;
+  setNavVisible(true);
+  if (wasProfileOnly) return go('settings');
+  if (cameraAllowed() && !state.settings.hasApiKey) {
+    go('settings');
+    toast({ title: 'One more step', body: 'Add your Presage API key below to turn on live readings.', actions: [{ label: 'OK' }] });
+    return;
+  }
+  go('home');
+}
+
+function obHead() {
+  const { steps, i } = state.ob;
+  return `<div class="ob-head">
+      <button class="btn btn-quiet btn-icon" id="ob-back" aria-label="Back" ${i === 0 ? 'hidden' : ''}><span style="display: inline-flex; transform: scaleX(-1)">${icon('chevron-right', 18)}</span></button>
+      ${steps.length > 1 ? `<div class="ob-progress" role="progressbar" aria-label="Setup progress" aria-valuemin="1" aria-valuemax="${steps.length}" aria-valuenow="${i + 1}">${steps.map((_, k) => `<span class="${k <= i ? 'on' : ''}"></span>`).join('')}</div>` : ''}
+    </div>`;
+}
+
+function nameStep() {
+  $('#view').innerHTML = `
+    <div class="onboard stack-24">
+      ${obHead()}
+      <div class="stack-8"><span class="brand-mark">${mark(36)}</span>
+        <h1 class="t-title">What should SOVA call you?</h1>
+        <p class="t-body t-2">Your name stays on this computer and is only used to greet you. No account, no password.</p></div>
+      <input type="text" id="ob-name" maxlength="40" autocomplete="given-name" placeholder="Your first name" aria-label="Your name" value="${esc(state.settings.profileName || '')}" style="height: 52px; font-size: 18px">
+      <div class="row"><button class="btn btn-primary btn-lg" id="ob-next">Continue</button><button class="btn btn-quiet btn-lg" id="ob-skip">Skip</button></div>
+    </div>`;
+  const next = async () => { await saveSettings({ profileName: $('#ob-name').value }); nextStep(); };
+  $('#ob-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') next(); });
+  $('#ob-next').addEventListener('click', next);
+  $('#ob-skip').addEventListener('click', nextStep);
+  $('#ob-name').focus();
+}
+
+function goalsStep() {
+  const goals = state.config.goals;
+  const picked = new Set(state.settings.goals || []);
+  $('#view').innerHTML = `
+    <div class="onboard stack-24">
+      ${obHead()}
+      <div class="stack-8"><h1 class="t-title">${state.settings.profileName ? `${esc(state.settings.profileName)}, what` : 'What'} brings you here?</h1>
+        <p class="t-body t-2">Pick as many as you like. SOVA sets your starting preset and breathing pattern from this, and you can change both at any time.</p></div>
+      <div class="stack-8" role="group" aria-label="Your goals">
+        ${goals.map((g) => `<button class="choice goal" role="checkbox" aria-checked="${picked.has(g.id)}" data-goal="${esc(g.id)}">
+          <span class="choice-name"><span class="goal-icon">${icon(g.icon, 18)}</span>${esc(g.name)}</span>
+          <span class="choice-meta" style="padding-left: 44px">${esc(g.meta)}</span>
+          <span class="choice-aside"><span class="check">${icon('check', 14)}</span></span></button>`).join('')}
+      </div>
+      <div class="row"><button class="btn btn-primary btn-lg" id="ob-next">Continue</button></div>
+    </div>`;
+  $$('[data-goal]').forEach((b) => b.addEventListener('click', () => {
+    const id = b.dataset.goal;
+    if (picked.has(id)) picked.delete(id); else picked.add(id);
+    b.setAttribute('aria-checked', String(picked.has(id)));
+  }));
+  $('#ob-next').addEventListener('click', async () => {
+    const chosen = goals.filter((g) => picked.has(g.id));
+    const patch = { goals: chosen.map((g) => g.id), onboarded: true };
+    const withPreset = chosen.find((g) => g.presetId);
+    const withPattern = chosen.find((g) => g.patternId);
+    if (withPreset) { patch.presetId = withPreset.presetId; state.selectedPreset = withPreset.presetId; }
+    if (withPattern) patch.breathingPatternId = withPattern.patternId;
+    await saveSettings(patch);
+    nextStep();
+  });
+}
+
+function showConsent() {
   const item = (ic, text) => `<div class="obs">${icon(ic, 18)}<span class="t-body">${text}</span></div>`;
   $('#view').innerHTML = `
-    <div class="stack-24" style="max-width: 680px; margin: 4vh auto 0">
-      <div class="stack-8"><span class="brand-mark">${mark(32)}</span><h1 class="t-title">Before your first session</h1>
+    <div class="onboard stack-24">
+      ${state.ob ? obHead() : ''}
+      <div class="stack-8"><h1 class="t-title">Before your first session</h1>
         <p class="t-body t-2">SOVA uses your camera to estimate breathing, pulse, HRV, blinking and talking while you focus. Here is exactly what happens.</p></div>
       <section class="panel">
         ${item('camera', 'The camera is on only during a focus session or reset, with an indicator and a pause button.')}
@@ -238,7 +378,7 @@ function showConsent() {
         ${item('message-square-text', "During a session the SDK also sends your pulse, HRV and breathing values (never video) to Presage's AI service for automatic vitals check-ins, about once a minute. SOVA cannot switch this off.")}
         ${item('sliders-horizontal', "Presage's anonymous SDK diagnostics are off unless you turn them on in Settings. They never include video, your readings or anything that identifies you.")}
         ${item('mic', 'Optional and off until you turn them on, each with its own consent: breath sound analysis with the microphone (never recorded), and AI reflections from Presage.')}
-        ${item('download', 'Only session summaries, your baseline, reflections and notes are stored, on this computer. You can export or delete them at any time.')}
+        ${item('download', 'Only session summaries, your baseline, reflections, notes, your name and check-ins are stored, on this computer. You can export or delete them at any time.')}
       </section>
       <p class="t-small">SOVA is a focus and self-reflection tool. It is not a medical device and is not for diagnosis or treatment.</p>
       <label class="row" style="min-height: 44px; cursor: pointer"><input type="checkbox" id="consent-check"><span class="t-body">I understand and agree to camera use during sessions</span></label>
@@ -250,11 +390,10 @@ function showConsent() {
   $('#consent-check').addEventListener('change', (e) => { $('#consent-ok').disabled = !e.target.checked; });
   $('#consent-ok').addEventListener('click', async () => {
     await saveSettings({ consentVersion: state.config.consentVersion });
-    setNavVisible(true);
-    go(state.settings.hasApiKey ? 'home' : 'settings');
-    if (!state.settings.hasApiKey) toast({ title: 'One more step', body: 'Add your Presage API key below to turn on live readings.', actions: [{ label: 'OK' }] });
+    state.timerOnly = false;
+    nextStep();
   });
-  $('#consent-no').addEventListener('click', () => { setNavVisible(true); state.timerOnly = true; go('home'); });
+  $('#consent-no').addEventListener('click', () => { state.timerOnly = true; nextStep(); });
 }
 
 // Microphone consent, shown the first time breath sound analysis is turned on.
@@ -293,6 +432,7 @@ async function startSession() {
     settings: state.settings,
     preset,
     apiKey,
+    checkIn: recentCheckIn(),
     onEnd: (record) => { state.session = null; showReflection(record); },
   });
   state.session.onScreen = true;
@@ -300,14 +440,21 @@ async function startSession() {
   updateTopbar();
 }
 
-function quickReset() {
+function patternById(id) {
+  if (id === 'custom') return { id: 'custom', name: 'Custom pattern', ...state.settings.customPattern };
+  return state.config.breathingPatterns.find((p) => p.id === id) || state.config.breathingPatterns[0];
+}
+
+// opts: { seconds, patternId } for the "what's going on?" resets.
+function quickReset(opts = {}) {
   if (!$('#overlay').hidden) return;
+  const pattern = opts.patternId ? patternById(opts.patternId) : currentPattern();
+  const seconds = opts.seconds || state.resetSeconds;
   const s = liveSession();
-  if (s && s.phaseUi === 'running') return s.startReset();
-  const pattern = currentPattern();
+  if (s && s.phaseUi === 'running') return s.startReset(seconds, pattern);
   const startedAt = new Date().toISOString();
   openReset({
-    config: state.config, settings: state.settings, pattern, seconds: state.resetSeconds, live: null,
+    config: state.config, settings: state.settings, pattern, seconds, live: null,
     onDone: async (res) => {
       if (res.seconds < 10) return;   // ended almost immediately: nothing worth keeping
       await window.sova.saveReset({
@@ -330,9 +477,45 @@ function eyeRest() {
 }
 
 function currentPattern() {
-  const id = state.settings.breathingPatternId;
-  if (id === 'custom') return { id: 'custom', name: 'Custom pattern', ...state.settings.customPattern };
-  return state.config.breathingPatterns.find((p) => p.id === id) || state.config.breathingPatterns[0];
+  return patternById(state.settings.breathingPatternId);
+}
+
+function startSituation(id) {
+  const sit = state.config.situations.find((x) => x.id === id);
+  if (!sit) return;
+  if (sit.eyeRest) return eyeRest();
+  quickReset({ seconds: sit.seconds, patternId: sit.patternId });
+}
+
+// The Home check-in counts for a session started within 6 hours of it.
+function recentCheckIn() {
+  const c = state.settings.lastCheckIn;
+  if (!c || !c.at) return null;
+  return Date.now() - Date.parse(c.at) <= 6 * 3600 * 1000 ? c : null;
+}
+
+function todaysCheckIn() {
+  const c = state.settings.lastCheckIn;
+  return c && c.at && Date.parse(c.at) >= startOfToday() ? c : null;
+}
+
+const FEELING_REPLY = {
+  Calm: { text: 'A good place to start from. Pick up where you left off.' },
+  Focused: { text: 'Make the most of it. A longer block may suit you today.' },
+  Tense: { text: 'A 90-second reset before you start can help you settle.', situation: 'overwhelmed', action: 'Start a 90-second reset' },
+  Tired: { text: 'Shorter blocks and an eye rest now and then may suit you today.', situation: 'tired-eyes', action: 'Rest your eyes' },
+  Scattered: { text: 'Two minutes of slow breathing can help you land before you start.', situation: 'between-meetings', action: 'Start a 2-minute reset' },
+};
+
+function situationRows(compact = false) {
+  return state.config.situations.map((x) => `<button class="choice" data-sit="${esc(x.id)}">
+      <span class="choice-name">${icon(x.eyeRest ? 'eye' : 'wind', 16)} ${esc(x.name)}</span>
+      <span class="choice-meta">${esc(x.meta)}${x.eyeRest ? '' : ` · ${x.seconds < 60 ? `${x.seconds} s` : `${Math.round(x.seconds / 6) / 10} min`}${compact ? '' : ` · ${esc(patternById(x.patternId).name)}`}`}</span>
+      <span class="choice-aside">${icon('chevron-right', 16)}</span></button>`).join('');
+}
+
+function bindSituations() {
+  $$('[data-sit]').forEach((b) => b.addEventListener('click', () => startSituation(b.dataset.sit)));
 }
 
 // ---------------------------------------------------------------------------
@@ -384,7 +567,7 @@ function showSummary(record) {
   const resets = (record.events || []).filter((e) => e.type === 'reset');
   const ba = resets.filter((r) => r.before && r.after);
   $('#view').innerHTML = `
-    ${pageHead(record.presetName, `Session complete · ${fmtDate(record.startedAt)}`, `<div class="row"><button class="btn btn-primary" id="again">${icon('play', 16)}Start another session</button><button class="btn btn-quiet" id="hist">${icon('history', 16)}Go to History</button></div>`)}
+    ${pageHead(record.presetName, `Session complete · ${fmtDate(record.startedAt)}${record.checkIn ? ` · you started feeling ${record.checkIn.feeling.toLowerCase()}` : ''}`, `<div class="row"><button class="btn btn-primary" id="again">${icon('play', 16)}Start another session</button><button class="btn btn-quiet" id="hist">${icon('history', 16)}Go to History</button></div>`)}
     <div class="stack-24">
       <div class="grid-4">
         ${stat('Focus time', esc(fmtMinutes(record.focusSeconds)))}
@@ -415,6 +598,21 @@ function showSummary(record) {
   $('#hist').addEventListener('click', () => go('history'));
 }
 
+// Sessions grouped by the feeling you reported before starting. Counts only.
+function feelingRows(sessions) {
+  const withCheck = sessions.filter((x) => x.checkIn && x.checkIn.feeling);
+  if (!withCheck.length) return empty('Answer "How are you feeling?" on Home before a session. SOVA then shows here how sessions went for each starting feeling.');
+  const rows = state.config.feelings.map((f) => {
+    const list = withCheck.filter((x) => x.checkIn.feeling === f);
+    if (!list.length) return '';
+    const mins = Math.round(list.reduce((n, x) => n + (x.focusSeconds || 0), 0) / list.length / 60);
+    const withReset = list.filter((x) => countEvents(x, 'reset') > 0).length;
+    return `<div class="row-item"><span class="row-title">${esc(f)}</span>
+      <span class="row-sub">${list.length} session${list.length === 1 ? '' : 's'} · ${mins} min focus on average · a reset in ${withReset} of ${list.length}</span></div>`;
+  }).join('');
+  return `<div class="rows">${rows}</div><p class="t-small" style="margin-top: 12px">Your own answers, counted. Not a measurement or a diagnosis.</p>`;
+}
+
 function pair(a, b) {
   const f = (v) => (v == null ? '<span class="t-meta">Not shown</span>' : `<span class="num">${esc(Math.round(v))}</span>`);
   return `${f(a)} <span class="t-2">→</span> ${f(b)}`;
@@ -436,11 +634,24 @@ const VIEWS = {
     const eyesToday = today.reduce((n, x) => n + countEvents(x, 'eye-rest'), 0);
     const last = sessions[0];
     const hour = new Date().getHours();
-    const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-    const pat = currentPattern();
+    const greeting = hour < 5 ? 'Good evening' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+    const name = (s.profileName || '').trim();
+    const check = todaysCheckIn();
     $('#view').innerHTML = `
-      ${pageHead(new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }), `${greeting}. Stay in focus. Stay in tune.`)}
-      <div class="stack-24">
+      <div class="page-head greet">
+        <div class="stack-8">
+          <span class="t-small">${esc(new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }))}</span>
+          <h1 class="t-display greet-title">${esc(greeting)}${name ? `, <span class="greet-name">${esc(name)}</span>` : ''}</h1>
+          <p class="t-body t-2">How are you feeling right now?</p>
+        </div>
+      </div>
+      <section class="feel stack" aria-label="How are you feeling?">
+        <div class="row" role="radiogroup" aria-label="How are you feeling?">
+          ${state.config.feelings.map((f) => `<button class="chip" role="radio" aria-checked="${!!(check && check.feeling === f)}" data-feel="${esc(f)}">${esc(f)}</button>`).join('')}
+        </div>
+        <div id="feel-reply" aria-live="polite"></div>
+      </section>
+      <div class="stack-24" style="margin-top: 24px">
         ${!cameraAllowed() ? `<div class="notice"><span class="dot off"></span><span class="grow">Camera consent not given, so sessions run as plain timers.</span><button class="btn" id="give-consent">Review consent</button></div>` : ''}
         ${cameraAllowed() && !s.hasApiKey ? `<div class="notice attention"><span class="dot warn"></span><span class="grow">Add your Presage API key to turn on live readings.</span><button class="btn" id="to-settings">Open Settings</button></div>` : ''}
         ${!navigator.onLine ? '<div class="notice"><span class="dot warn"></span><span class="grow">Offline: timers, recovery and history still work. Live readings return when you reconnect.</span></div>' : ''}
@@ -466,13 +677,13 @@ const VIEWS = {
                 <div class="row-item"><span class="row-title" style="font-weight: 400">Eye rests</span><span class="row-aside t-figure" style="font-size: 22px">${eyesToday}</span></div>
               </div>
             </section>
-            <section class="panel stack">
-              <h2 class="t-section">Recover now</h2>
-              <button class="choice" id="h-reset"><span class="choice-name">${icon('wind', 16)} Breathing reset</span><span class="choice-meta">${esc(pat.name)} · ${state.resetSeconds < 60 ? `${state.resetSeconds} s` : `${state.resetSeconds / 60} min`}</span><span class="choice-aside">${icon('chevron-right', 16)}</span></button>
-              <button class="choice" id="h-eyes"><span class="choice-name">${icon('eye', 16)} Eye rest</span><span class="choice-meta">20-second look-away</span><span class="choice-aside">${icon('chevron-right', 16)}</span></button>
-            </section>
+
           </div>
         </div>
+        <section class="panel stack">
+          <div class="panel-head" style="margin-bottom: 0"><h2 class="t-section">What's going on?</h2><button class="btn btn-text" id="h-more">More in Recovery</button></div>
+          <div class="sit-grid">${situationRows(true)}</div>
+        </section>
         <section class="panel">
           <div class="panel-head"><h2 class="t-section">Last session</h2>${last ? `<span class="t-meta">${esc(fmtDate(last.startedAt))} · ${esc(last.presetName)} · ${esc(fmtMinutes(last.focusSeconds))}</span>` : ''}</div>
           ${last ? renderTimeline(last, { compact: true }) : empty('No sessions yet. Your first session timeline will appear here.')}
@@ -485,9 +696,25 @@ const VIEWS = {
     state.cleanup = () => window.removeEventListener('resize', redraw);
     $('#h-start').addEventListener('click', startSession);
     $('#h-change').addEventListener('click', () => go('focus'));
-    $('#h-reset').addEventListener('click', quickReset);
-    $('#h-eyes').addEventListener('click', eyeRest);
-    const gc = $('#give-consent'); if (gc) gc.addEventListener('click', () => { state.timerOnly = false; showConsent(); });
+    $('#h-more').addEventListener('click', () => go('recovery'));
+    bindSituations();
+    const reply = (feeling) => {
+      const r = FEELING_REPLY[feeling];
+      const box = $('#feel-reply');
+      if (!box) return;
+      if (!r) { box.innerHTML = ''; return; }
+      box.innerHTML = `<div class="notice"><span class="dot live"></span><span class="grow">${esc(r.text)}</span>${r.situation ? `<button class="btn" id="feel-go">${esc(r.action)}</button>` : ''}</div>`;
+      const g = $('#feel-go'); if (g) g.addEventListener('click', () => startSituation(r.situation));
+    };
+    if (check) reply(check.feeling);
+    $$('[data-feel]').forEach((b) => b.addEventListener('click', async () => {
+      const feeling = b.dataset.feel;
+      $$('[data-feel]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+      await saveSettings({ lastCheckIn: { feeling, at: new Date().toISOString() } });
+      reply(feeling);
+      announce(`Noted: ${feeling}`);
+    }));
+    const gc = $('#give-consent'); if (gc) gc.addEventListener('click', reviewConsent);
     const ts = $('#to-settings'); if (ts) ts.addEventListener('click', () => go('settings'));
   },
 
@@ -538,10 +765,12 @@ const VIEWS = {
     const s = state.settings;
     const cp = s.customPattern;
     const pattern = currentPattern();
-    const dur = (d) => (d < 60 ? `${d} s` : `${d / 60} min`);
+    const dur = (d) => `${Math.floor(d / 60)}:${String(d % 60).padStart(2, '0')}`;
+    const L = cfg.resetLengthSeconds;
     $('#view').innerHTML = `
       ${pageHead('Recovery', 'Guided breathing and eye rests. During a focus session, resets also show your own breath in teal.')}
       <div class="split-r" style="align-items: start">
+        <div class="stack-24">
         <section class="panel stack-24">
           <div class="row-between" style="align-items: flex-end">
             <div class="stack-8"><span class="t-small">Preview</span><span class="t-title" id="rec-phase">Breathe in</span></div>
@@ -549,17 +778,25 @@ const VIEWS = {
           </div>
           <canvas class="reset-canvas" id="rec-lines" style="height: 260px" aria-hidden="true"></canvas>
           <div class="row-between">
-            <div class="seg" role="radiogroup" aria-label="Session length">
-              ${cfg.breathingDurationsSeconds.map((d) => `<button role="radio" aria-checked="${d === state.resetSeconds}" data-dur="${d}">${dur(d)}</button>`).join('')}
+            <div class="stepper" role="group" aria-label="Reset length">
+              <span class="t-small">Duration</span>
+              <span class="clock" id="dur-val" style="font-size: 32px; min-width: 96px; text-align: center" aria-live="polite">${dur(state.resetSeconds)}</span>
+              <button class="btn btn-icon btn-lg round" id="dur-minus" aria-label="Shorter by 30 seconds">${icon('minus', 18)}</button>
+              <button class="btn btn-icon btn-lg round" id="dur-plus" aria-label="Longer by 30 seconds">${icon('plus', 18)}</button>
             </div>
-            <button class="btn btn-primary btn-lg" id="rec-go">${icon('play', 18)}Start ${state.resetSeconds < 60 ? `${state.resetSeconds}-second` : `${state.resetSeconds / 60}-minute`} reset</button>
+            <button class="btn btn-primary btn-lg" id="rec-go">${icon('play', 18)}Start reset</button>
           </div>
         </section>
+        <section class="panel stack">
+          <h2 class="t-section">What's going on?</h2>
+          <div class="grid-2" style="gap: 8px">${situationRows()}</div>
+        </section>
+        </div>
         <div class="stack-24">
           <section class="panel stack">
             <h2 class="t-section">Pattern</h2>
             <div class="stack-8" role="radiogroup" aria-label="Breathing pattern">
-              ${cfg.breathingPatterns.map((p) => `<button class="choice" role="radio" aria-checked="${s.breathingPatternId === p.id}" data-pat="${esc(p.id)}"><span class="choice-name">${esc(p.name)}</span><span class="choice-meta">${esc(patternMeta(p))}</span></button>`).join('')}
+              ${cfg.breathingPatterns.map((p) => `<button class="choice" role="radio" aria-checked="${s.breathingPatternId === p.id}" data-pat="${esc(p.id)}"><span class="choice-name">${esc(p.name)}</span><span class="choice-meta">${p.note ? `${esc(p.note)} · ` : ''}${esc(patternMeta(p))}</span></button>`).join('')}
               <button class="choice" role="radio" aria-checked="${s.breathingPatternId === 'custom'}" data-pat="custom"><span class="choice-name">Custom</span><span class="choice-meta">Your own timings</span></button>
             </div>
             <div class="stack-8" id="custom-row" ${s.breathingPatternId === 'custom' ? '' : 'hidden'}>
@@ -597,11 +834,16 @@ const VIEWS = {
     const timer = setInterval(tick, 50);
     state.cleanup = () => { clearInterval(timer); lines.stop(); };
 
-    $$('[data-dur]').forEach((b) => b.addEventListener('click', () => {
-      state.resetSeconds = Number(b.dataset.dur);
-      $$('[data-dur]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
-      $('#rec-go').innerHTML = `${icon('play', 18)}Start ${state.resetSeconds < 60 ? `${state.resetSeconds}-second` : `${state.resetSeconds / 60}-minute`} reset`;
-    }));
+    const setDur = (v) => {
+      state.resetSeconds = Math.max(L.min, Math.min(L.max, v));
+      $('#dur-val').textContent = dur(state.resetSeconds);
+      $('#dur-minus').disabled = state.resetSeconds <= L.min;
+      $('#dur-plus').disabled = state.resetSeconds >= L.max;
+    };
+    setDur(state.resetSeconds);
+    $('#dur-minus').addEventListener('click', () => setDur(state.resetSeconds - L.step));
+    $('#dur-plus').addEventListener('click', () => setDur(state.resetSeconds + L.step));
+    bindSituations();
     $$('[data-pat]').forEach((b) => b.addEventListener('click', async () => {
       await saveSettings({ breathingPatternId: b.dataset.pat });
       $$('[data-pat]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
@@ -620,7 +862,7 @@ const VIEWS = {
       if (e.target.checked) { e.target.checked = false; askMicConsent(() => { const m = $('#rec-mic'); if (m) m.checked = true; }); }
       else saveSettings({ micBreath: false });
     });
-    $('#rec-go').addEventListener('click', quickReset);
+    $('#rec-go').addEventListener('click', () => quickReset());
     $('#e-go').addEventListener('click', eyeRest);
   },
 
@@ -683,6 +925,10 @@ const VIEWS = {
               : empty('No clear patterns yet. SOVA only reports one when your sessions show it consistently.')}
           </section>
         </div>
+        <section class="panel">
+          <div class="panel-head"><h2 class="t-section">How you started</h2><span class="t-meta">from your Home check-ins</span></div>
+          ${feelingRows(sessions)}
+        </section>
       </div>`;
     const tp = $('#tl-pick');
     if (tp) tp.addEventListener('change', () => {
@@ -748,7 +994,7 @@ const VIEWS = {
             ${sessions.length ? `<div class="rows">${sessions.map((s) => `
               <button class="row-item" data-sid="${esc(s.id)}">
                 <span class="row-title">${esc(s.presetName)}${s.mode === 'timer' ? ' <span class="t-meta">timer only</span>' : ''}</span>
-                <span class="row-sub">${esc(fmtDate(s.startedAt))}${s.reflection && s.reflection.tags && s.reflection.tags.length ? ` · ${esc(s.reflection.tags.join(', '))}` : ''}${s.reflection && s.reflection.note ? ` · ${esc(s.reflection.note)}` : ''}</span>
+                <span class="row-sub">${esc(fmtDate(s.startedAt))}${s.checkIn ? ` · started ${esc(s.checkIn.feeling.toLowerCase())}` : ''}${s.reflection && s.reflection.tags && s.reflection.tags.length ? ` · ${esc(s.reflection.tags.join(', '))}` : ''}${s.reflection && s.reflection.note ? ` · ${esc(s.reflection.note)}` : ''}</span>
                 <span class="row-aside"><span class="t-num">${esc(fmtMinutes(s.focusSeconds))}</span> ${icon('chevron-right', 16)}</span>
               </button>`).join('')}</div>` : empty('No sessions yet. Start one from Focus.', '<div><button class="btn" id="to-focus">Open Focus</button></div>')}
           </section>
@@ -810,7 +1056,7 @@ const VIEWS = {
     if (state.view !== 'settings') return;
     const config = state.config;
     const ov = cleanOverrides(s.cueOverrides);
-    const SECTIONS = [['set-key', 'API key'], ['set-camera', 'Camera'], ['set-cues', 'Cues'], ['set-presets', 'Focus presets'], ['set-access', 'Accessibility'], ['set-privacy', 'Privacy'], ['set-data', 'Your data']];
+    const SECTIONS = [['set-profile', 'Profile'], ['set-look', 'Appearance'], ['set-key', 'API key'], ['set-camera', 'Camera'], ['set-cues', 'Cues'], ['set-presets', 'Focus presets'], ['set-access', 'Accessibility'], ['set-privacy', 'Privacy'], ['set-data', 'Your data']];
     const field = (label, control, help = '') => `<div class="setting"><div class="setting-text"><span class="setting-label">${label}</span>${help ? `<span class="setting-help">${help}</span>` : ''}</div>${control}</div>`;
     const prow = (label, value, good) => `<div class="row-item"><span class="row-title" style="font-weight: 400">${label}</span><span class="row-aside t-small" style="color: ${good ? 'var(--accent)' : 'var(--text-2)'}">${value}</span></div>`;
     $('#view').innerHTML = `
@@ -818,6 +1064,17 @@ const VIEWS = {
       <div class="settings">
         <nav class="settings-nav" aria-label="Settings sections">${SECTIONS.map(([id, l]) => `<a href="#${id}" data-jump="${id}">${l}</a>`).join('')}</nav>
         <div class="stack-24">
+          <section class="panel" id="set-profile">
+            <div class="panel-head"><h2 class="t-section">Profile</h2><span class="t-meta">on this computer only</span></div>
+            ${field('Your name', `<input type="text" id="pf-name" maxlength="40" value="${esc(s.profileName || '')}" placeholder="Your first name" aria-label="Your name" style="width: 220px">`, 'Used only to greet you on Home')}
+            ${field('Your goals', `<button class="btn btn-quiet" id="pf-goals">Change goals</button>`, (s.goals || []).length ? esc(config.goals.filter((g) => s.goals.includes(g.id)).map((g) => g.name).join(', ')) : 'None chosen')}
+          </section>
+
+          <section class="panel" id="set-look">
+            <div class="panel-head"><h2 class="t-section">Appearance</h2></div>
+            ${field('Mode', `<div class="seg" role="radiogroup" aria-label="Appearance">${[['system', 'Follow Windows'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => `<button role="radio" aria-checked="${(s.appearance || 'system') === v}" data-appear="${v}">${l}</button>`).join('')}</div>`, 'Follow Windows switches with your system setting')}
+          </section>
+
           <section class="panel" id="set-key">
             <div class="panel-head"><h2 class="t-section">Presage API key</h2><span class="status t-small"><span class="dot ${s.hasApiKey ? 'live' : 'off'}"></span>${s.hasApiKey ? 'Saved' : 'Not set'}</span></div>
             ${s.apiKeyFromEnv ? '<p class="t-small">Using the key from the SOVA_PRESAGE_API_KEY environment variable.</p>' : `
@@ -877,6 +1134,7 @@ const VIEWS = {
             <div class="panel-head"><h2 class="t-section">Privacy</h2><a class="t-small" href="${PRIVACY_POLICY}" target="_blank" rel="noreferrer">Presage privacy policy ${icon('external-link', 14)}</a></div>
             <div class="rows" style="margin-bottom: 8px">
               ${prow('Camera video and photos', 'Never recorded or saved', true)}
+              ${prow('Your name, goals and check-ins', 'Stored only here, no account', true)}
               ${prow('Microphone audio', s.micBreath ? 'Loudness only, never recorded' : 'Off', true)}
               ${prow('Camera consent', cameraAllowed() ? `Given · version ${s.consentVersion}` : 'Not given, timer only', cameraAllowed())}
               ${prow('Sent to Presage during sessions', `Sign-in and vitals for automatic AI check-ins${s.telemetry ? ', anonymous diagnostics' : ''}`, false)}
@@ -927,6 +1185,12 @@ const VIEWS = {
     $('#sens').addEventListener('change', (e) => saveSettings({ sensitivity: e.target.value || null }));
     $('#def-preset').addEventListener('change', async (e) => { await saveSettings({ presetId: e.target.value }); state.selectedPreset = e.target.value; });
     $('#to-recovery').addEventListener('click', () => go('recovery'));
+    $('#pf-name').addEventListener('change', (e) => saveSettings({ profileName: e.target.value }));
+    $('#pf-goals').addEventListener('click', () => startOnboarding({ profileOnly: true }));
+    $$('[data-appear]').forEach((b) => b.addEventListener('click', async () => {
+      await saveSettings({ appearance: b.dataset.appear });
+      $$('[data-appear]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+    }));
     const qh = () => saveSettings({ quietHours: { enabled: $('#qh-on').checked, start: $('#qh-start').value || '21:00', end: $('#qh-end').value || '08:00' } });
     ['#qh-on', '#qh-start', '#qh-end'].forEach((id) => $(id).addEventListener('change', qh));
     $('#mic').addEventListener('change', (e) => {
@@ -954,11 +1218,11 @@ const VIEWS = {
       title: 'Delete all SOVA data?',
       body: 'This removes every session, breathing reset, reflection, note, AI reflection, setting and your saved API key from this computer. It cannot be undone.',
       actions: [
-        { label: 'Delete everything', primary: true, onClick: async () => { await window.sova.deleteAll(); state.settings = await window.sova.getSettings(); announce('All data deleted'); showConsent(); } },
+        { label: 'Delete everything', primary: true, onClick: async () => { await window.sova.deleteAll(); state.settings = await window.sova.getSettings(); announce('All data deleted'); state.timerOnly = false; state.selectedPreset = state.settings.presetId; startOnboarding(); } },
         { label: 'Cancel' },
       ],
     }));
-    $('#consent').addEventListener('click', () => { state.timerOnly = false; showConsent(); });
+    $('#consent').addEventListener('click', reviewConsent);
   },
 };
 

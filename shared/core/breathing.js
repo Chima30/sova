@@ -37,8 +37,9 @@ function exhaleCoaching(ieRatio, targetExhaleRatio) {
   if (ieRatio == null || !Number.isFinite(ieRatio) || ieRatio <= 0) return null;
   const exhalePerInhale = 1 / ieRatio;
   const label = `1 : ${exhalePerInhale.toFixed(1)}`;
-  if (exhalePerInhale >= targetExhaleRatio) return { label, tip: 'Good, keep the long exhale' };
-  return { label, tip: 'Try a slightly longer exhale' };
+  const even = targetExhaleRatio <= 1.05;
+  if (exhalePerInhale >= targetExhaleRatio * 0.95) return { label, tip: even ? 'Good, keep it even' : 'Good, keep the long exhale' };
+  return { label, tip: even ? 'Try matching your exhale to your inhale' : 'Try a slightly longer exhale' };
 }
 
 const PHASE_TEXT = { inhale: 'Breathe in', hold: 'Hold', exhale: 'Breathe out', rest: 'Rest' };

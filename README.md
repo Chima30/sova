@@ -170,9 +170,9 @@ SOVA calls the SDK's `requestInsight` only when the user has turned on AI reflec
 - SOVA itself sends nothing else anywhere. Nothing is shared with any other party. No accounts, no cloud sync, no analytics, no ads.
 
 **Storage, retention and deletion**
-- Stored on the user's computer only, as JSON in the app's data folder (on Windows `%APPDATA%\SOVA`): session summaries, personal baselines, session events (cues, resets, eye rests, pauses, 30-second tension samples), before-and-after values, breath-sound results, AI reflections, reflections, notes and settings.
+- Stored on the user's computer only, as JSON in the app's data folder (on Windows `%APPDATA%\SOVA`): session summaries, personal baselines, session events (cues, resets, eye rests, pauses, 30-second tension samples), before-and-after values, breath-sound results, AI reflections, reflections, notes, settings, and the local profile: the name SOVA greets you by, your first-launch goals and the optional "how are you feeling?" check-ins. There are no accounts and no passwords; the profile never leaves the computer.
 - The Presage API key is encrypted with the operating system's secure storage (Electron `safeStorage`) and never written to the repository.
-- Data is kept until the user deletes it. Settings › Delete all data removes every session, reflection, note, setting and the saved API key.
+- Data is kept until the user deletes it. Settings › Delete all data removes every session, reflection, note, check-in, setting, the local profile and the saved API key.
 - Settings › Export CSV or JSON gives the user a full copy of their data.
 
 **SDK telemetry**

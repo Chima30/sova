@@ -12,12 +12,12 @@
     ctx.clearRect(0, 0, c.width, c.height);
     if (!show || !points || points.length < 4) {
       // Nothing measured: a still grey line, never an invented breath.
-      ctx.strokeStyle = 'rgba(122, 130, 150, 0.5)';
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#8e89b0';
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(0, c.height / 2); ctx.lineTo(c.width, c.height / 2); ctx.stroke();
       return;
     }
-    ctx.strokeStyle = '#5fcfc3';
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#6fd8c6';
     ctx.lineWidth = 2;
     ctx.lineJoin = 'round';
     ctx.beginPath();
@@ -30,6 +30,7 @@
   }
 
   window.sovaWidget.onState((s) => {
+    document.documentElement.dataset.theme = s.theme === 'light' ? 'light' : 'dark';
     $('title').textContent = s.preset ? `SOVA · ${s.preset}` : 'SOVA';
     $('clock').textContent = s.clock;
     $('sub').textContent = s.line;

@@ -8,13 +8,13 @@ const { esc } = require('./dom');
 const { buildTimeline } = require('../../shared/core/insights');
 
 const C = {
-  focus: '#5fcfc3',
-  focusLive: 'rgba(95, 207, 195, 0.55)',
-  break: '#232836',
-  tense: '#d9b26f',
-  away: '#4b5468',
-  meeting: '#6d6496',
-  paused: '#3a4152',
+  focus: 'var(--accent)',
+  focusLive: 'var(--accent-soft)',
+  break: 'var(--raised-2)',
+  tense: 'var(--attention)',
+  away: 'var(--muted)',
+  meeting: 'var(--lavender)',
+  paused: 'var(--hair-2)',
 };
 const STRETCH = {
   tense: { color: C.tense, label: 'Breathing or pulse above baseline' },
@@ -23,14 +23,14 @@ const STRETCH = {
   paused: { color: C.paused, label: 'Paused' },
 };
 const MARK = {
-  'cue-tension': '#d9b26f',
-  'cue-eye-rest': '#a3a9b8',
-  reset: '#5fcfc3',
-  'eye-rest': '#b3a9e6',
-  'flow-snooze': '#7a8296',
-  'break-skipped': '#7a8296',
-  recalibrate: '#7a8296',
-  'ai-checkin': '#b3a9e6',
+  'cue-tension': 'var(--attention)',
+  'cue-eye-rest': 'var(--text-2)',
+  reset: 'var(--accent)',
+  'eye-rest': 'var(--lavender)',
+  'flow-snooze': 'var(--muted)',
+  'break-skipped': 'var(--muted)',
+  recalibrate: 'var(--muted)',
+  'ai-checkin': 'var(--lavender)',
 };
 
 function clockAt(session, offsetSec) {
@@ -47,9 +47,9 @@ function renderTimeline(session, { compact = false, plannedSeconds = null } = {}
   const kinds = new Set(tl.stretches.map((s) => s.kind));
   const live = plannedSeconds != null;
 
-  const bands = tl.segments.map((s) => `<div class="tl-band" title="${s.kind === 'focus' ? `Focus block ${s.block || ''}` : 'Break'}" style="left: ${pct(s.from, T)}; width: ${pct(s.to - s.from, T)}; background: ${s.kind === 'focus' ? (live ? C.focusLive : C.focus) : C.break}; border-right: 2px solid #07080d"></div>`).join('');
+  const bands = tl.segments.map((s) => `<div class="tl-band" title="${s.kind === 'focus' ? `Focus block ${s.block || ''}` : 'Break'}" style="left: ${pct(s.from, T)}; width: ${pct(s.to - s.from, T)}; background: ${s.kind === 'focus' ? (live ? C.focusLive : C.focus) : C.break}; border-right: 2px solid var(--bg)"></div>`).join('');
   const stretches = tl.stretches.map((s) => `<div class="tl-band" title="${esc(STRETCH[s.kind].label)}" style="left: ${pct(s.from, T)}; width: max(3px, ${pct(s.to - s.from, T)}); background: ${STRETCH[s.kind].color}; border-radius: 2px"></div>`).join('');
-  const markers = tl.markers.map((m) => `<div class="tl-mark" title="${esc(m.label)} at ${esc(clockAt(session, m.at))}" style="left: calc(${pct(m.at, T)} - 5px); background: ${MARK[m.kind] || '#7a8296'}"></div>`).join('');
+  const markers = tl.markers.map((m) => `<div class="tl-mark" title="${esc(m.label)} at ${esc(clockAt(session, m.at))}" style="left: calc(${pct(m.at, T)} - 5px); background: ${MARK[m.kind] || 'var(--muted)'}"></div>`).join('');
   const nowLine = live ? `<div style="position: absolute; top: 0; bottom: 0; left: ${pct(tl.total, T)}; width: 2px; background: var(--text)"></div>` : '';
 
   const legend = [
@@ -59,7 +59,7 @@ function renderTimeline(session, { compact = false, plannedSeconds = null } = {}
   ].join('');
 
   const list = tl.markers.length
-    ? `<div class="rows">${tl.markers.map((m) => `<div class="row-item" style="padding: 10px 4px"><span class="row" style="gap: 10px"><span class="dot" style="background: ${MARK[m.kind] || '#7a8296'}"></span>${esc(m.label)}</span><span class="t-meta row-aside">${esc(clockAt(session, m.at))}</span></div>`).join('')}</div>`
+    ? `<div class="rows">${tl.markers.map((m) => `<div class="row-item" style="padding: 10px 4px"><span class="row" style="gap: 10px"><span class="dot" style="background: ${MARK[m.kind] || 'var(--muted)'}"></span>${esc(m.label)}</span><span class="t-meta row-aside">${esc(clockAt(session, m.at))}</span></div>`).join('')}</div>`
     : '<p class="t-small">No cues, resets or eye rests in this session.</p>';
   const hasSamples = (session.events || []).some((e) => e.type === 'sample');
 

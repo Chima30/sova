@@ -160,7 +160,9 @@ test('export writes empty cells for unreliable values and escapes notes', () => 
     reflection: { tags: ['Calm', 'Tired'], note: 'said "hi", then left' },
   }];
   const csv = toCSV(s).split('\n');
-  assert.match(csv[1], /^a,Studying,x,y,25,1,,71.3,,false,1,1,0,0,0,Calm; Tired,"said ""hi"", then left",$/);
+  assert.match(csv[1], /^a,Studying,x,y,25,1,,71.3,,false,1,1,0,0,0,Calm; Tired,"said ""hi"", then left",,$/);
+  s[0].checkIn = { feeling: 'Tense', at: 'x' };
+  assert.match(toCSV(s).split('\n')[1], /,Tense$/);
   const json = JSON.parse(toJSON(s, { theme: 'dark' }));
   assert.equal(json.app, 'SOVA');
 });

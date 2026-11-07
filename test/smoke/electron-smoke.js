@@ -11,7 +11,7 @@ const { app, BrowserWindow } = require('electron');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sova-smoke-'));
 app.setPath('userData', tmp);
-fs.writeFileSync(path.join(tmp, 'sova-settings.json'), JSON.stringify({ consentVersion: 3, showWidget: true }));
+fs.writeFileSync(path.join(tmp, 'sova-settings.json'), JSON.stringify({ consentVersion: 3, showWidget: true, appearance: process.env.SOVA_SMOKE_THEME || 'dark' }));
 const base = Date.parse('2026-11-06T09:00:00.000Z');
 const at = (s) => new Date(base + s * 1000).toISOString();
 fs.writeFileSync(path.join(tmp, 'sova-sessions.json'), JSON.stringify([{
@@ -59,6 +59,25 @@ app.whenReady().then(async () => {
   const shot = async (w, name) => { if (shots) fs.writeFileSync(path.join(shots, name), (await w.webContents.capturePage()).toPNG()); };
   try {
     win.setSize(1440, 900);
+    // First launch: name and goals (consent was seeded).
+    report.onboarding = await run(`document.querySelector('#view h1').textContent`);
+    await shot(win, 'onboard-name.png');
+    await run(`document.getElementById('ob-name').value = 'John'; document.getElementById('ob-next').click()`);
+    await wait(500);
+    await run(`document.querySelector('[data-goal="focus"]').click(); document.querySelector('[data-goal="stress"]').click()`);
+    await wait(300);
+    report.goalsPicked = await run(`[...document.querySelectorAll('[data-goal][aria-checked="true"]')].map((b) => b.dataset.goal).join(',')`);
+    await shot(win, 'onboard-goals.png');
+    await run(`document.getElementById('ob-next').click()`);
+    await wait(800);
+    report.afterSetup = await run(`document.querySelector('#view h1').textContent`);
+    await run(`document.querySelector('.toast .btn') && document.querySelector('.toast .btn').click(); document.querySelector('[data-nav="home"]').click()`);
+    await wait(800);
+    report.greeting = await run(`document.querySelector('#view h1').textContent`);
+    await run(`document.querySelector('[data-feel="Tense"]').click()`);
+    await wait(400);
+    report.feelReply = await run(`document.getElementById('feel-reply').innerText`);
+    await shot(win, 'home-checkin.png');
     report.title = win.getTitle();
     for (const view of ['home', 'focus', 'recovery', 'insights', 'history', 'sounds', 'settings']) {
       await run(`document.querySelector('[data-nav="${view}"]').click()`);
@@ -104,6 +123,7 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('[data-tag="Productive"]').click(); document.getElementById('note').value = 'smoke'; document.getElementById('save').click()`);
     await wait(800);
     await shot(win, 'summary.png');
+    report.summaryFeeling = await run(`document.querySelector('#view .page-head .t-small').textContent`);
     report.summary = await run(`document.querySelector('#view h1').textContent + ' | timeline: ' + !!document.querySelector('#view [role=img]')`);
     report.widgetClosed = !BrowserWindow.getAllWindows().some((w) => w.webContents.getURL().includes('widget.html'));
 
@@ -115,7 +135,8 @@ app.whenReady().then(async () => {
     report.micConsent = await run(`document.querySelector('.toast strong').textContent`);
     await run(`document.querySelector('.toast .btn-primary').click()`);
     await wait(600);
-    await run(`document.querySelector('[data-dur="30"]').click()`);
+    await run(`document.getElementById('dur-minus').click()`);
+    report.duration = await run(`document.getElementById('dur-val').textContent`);
     await wait(300);
     await run(`document.getElementById('rec-go').click()`);
     await wait(1500);

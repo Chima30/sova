@@ -8,26 +8,28 @@
     @font-face { font-family: "Geist"; src: url("./fonts/geist.woff2") format("woff2"); font-weight: 100 900; }
     @font-face { font-family: "Geist Mono"; src: url("./fonts/geist-mono.woff2") format("woff2"); font-weight: 100 900; }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; background: #0b0d14; color: #f0eee9; font-family: "Geist", "Segoe UI", system-ui, sans-serif; overflow: hidden; user-select: none; -webkit-font-smoothing: antialiased; }
-    .card { height: 100%; border: 1px solid rgba(240, 238, 233, 0.14); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; -webkit-app-region: drag; background: #11141c; }
+    :root { --bg: #12102a; --card: #1d1a3c; --hair: rgba(236, 232, 255, 0.15); --text: #f4f1fb; --text-2: #bab5d7; --muted: #8e89b0; --accent: #6fd8c6; --btn: #2a2652; --btn-2: #36315f; --primary: #f4f1fb; --primary-ink: #17142f; }
+    [data-theme="light"] { --bg: #f4f1fa; --card: #ffffff; --hair: rgba(44, 36, 96, 0.15); --text: #221e45; --text-2: #565280; --muted: #7f7ba0; --accent: #14907f; --btn: #f1edfb; --btn-2: #e6e0f6; --primary: #2b2564; --primary-ink: #ffffff; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: "Geist", "Segoe UI", system-ui, sans-serif; overflow: hidden; user-select: none; -webkit-font-smoothing: antialiased; }
+    .card { height: 100%; border: 1px solid var(--hair); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; -webkit-app-region: drag; background: var(--card); }
     .top { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
-    .brand { display: inline-flex; align-items: center; gap: 8px; color: #a3a9b8; }
-    .brand svg { color: #5fcfc3; }
-    .cam { display: flex; align-items: center; gap: 6px; color: #a3a9b8; }
-    .dot { width: 6px; height: 6px; border-radius: 50%; background: #5fcfc3; box-shadow: 0 0 0 3px rgba(95, 207, 195, 0.15); }
-    .dot.warn { background: #7a8296; box-shadow: none; }
+    .brand { display: inline-flex; align-items: center; gap: 8px; color: var(--text-2); }
+    .brand svg { color: var(--accent); }
+    .cam { display: flex; align-items: center; gap: 6px; color: var(--text-2); }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+    .dot.warn { background: var(--muted); box-shadow: none; }
     .mid { display: flex; align-items: center; gap: 12px; }
     .clock { font-size: 34px; font-weight: 300; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; min-width: 96px; }
     .live { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-    .sub { font-size: 12px; color: #a3a9b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sub { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     canvas { width: 100%; height: 24px; display: block; }
     .row { display: flex; gap: 6px; -webkit-app-region: no-drag; }
-    button { height: 32px; border-radius: 10px; border: 1px solid rgba(240, 238, 233, 0.14); background: #1a1e28; color: #f0eee9; font: 500 13px "Geist", "Segoe UI", sans-serif; cursor: pointer; padding: 0 12px; }
-    button:hover { background: #232836; }
-    button.primary { flex: 1; background: #f0eee9; color: #0b0d14; border-color: transparent; }
-    button.primary:hover { background: #ffffff; }
-    button:focus-visible { outline: 2px solid #5fcfc3; outline-offset: 2px; }
-    .x { height: 22px; width: 22px; padding: 0; border: none; background: transparent; color: #7a8296; -webkit-app-region: no-drag; font-size: 14px; }
+    button { height: 32px; border-radius: 10px; border: 1px solid var(--hair); background: var(--btn); color: var(--text); font: 500 13px "Geist", "Segoe UI", sans-serif; cursor: pointer; padding: 0 12px; }
+    button:hover { background: var(--btn-2); }
+    button.primary { flex: 1; background: var(--primary); color: var(--primary-ink); border-color: transparent; }
+    button.primary:hover { filter: brightness(1.08); }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .x { height: 22px; width: 22px; padding: 0; border: none; background: transparent; color: var(--muted); -webkit-app-region: no-drag; font-size: 14px; }
   </style>
 </head>
 <body>

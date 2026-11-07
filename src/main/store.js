@@ -16,7 +16,11 @@ const DEFAULT_SETTINGS = {
   soundGuide: false,
   breathingPatternId: 'calm-6',
   customPattern: { inhale: 4, hold: 0, exhale: 6, holdAfterExhale: 0 },
-  theme: 'dark',
+  appearance: 'system',        // 'system' (follow Windows), 'light' or 'dark'
+  profileName: '',             // what SOVA calls you; stored only here
+  goals: [],                   // first-launch answers to "what brings you here?"
+  onboarded: false,
+  lastCheckIn: null,           // { feeling, at } from Home's "how are you feeling?"
   showWidget: true,
   micBreath: false,            // breath sound analysis in resets (opt-in)
   aiReflections: false,        // Presage AI reflections (opt-in)
@@ -33,7 +37,8 @@ const DEFAULT_SETTINGS = {
 // Keys the renderer is allowed to change.
 const WRITABLE = new Set([
   'consentVersion', 'telemetry', 'presetId', 'sensitivity', 'quietHours',
-  'reducedMotion', 'soundGuide', 'breathingPatternId', 'customPattern', 'theme',
+  'reducedMotion', 'soundGuide', 'breathingPatternId', 'customPattern', 'appearance',
+  'profileName', 'goals', 'onboarded', 'lastCheckIn',
   'captureMode', 'cameraId', 'showWidget',
   'cueOverrides', 'autoSound', 'soundDuringBreaks', 'soundVolume', 'soundId', 'micBreath', 'aiReflections',
 ]);
@@ -68,7 +73,10 @@ class Store {
   updateSettings(patch) {
     const next = this.getSettings();
     for (const [k, v] of Object.entries(patch || {})) {
-      if (WRITABLE.has(k)) next[k] = v;
+      if (!WRITABLE.has(k)) continue;
+      if (k === 'profileName') next[k] = String(v || '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 40);
+      else if (k === 'appearance') next[k] = ['system', 'light', 'dark'].includes(v) ? v : 'system';
+      else next[k] = v;
     }
     this._write(this.settingsPath, next);
     return next;

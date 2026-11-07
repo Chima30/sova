@@ -8,9 +8,17 @@
 //
 // The ribbon never invents a breath. Without a level it falls back to idle.
 
-const TEAL = [95, 207, 195];
-const LAVENDER = [179, 169, 230];
-const GREY = [122, 130, 150];
+// Fallbacks; the real colours come from the theme (--line-live and friends).
+const FALLBACK = { live: [111, 216, 198], guide: [185, 170, 242], idle: [150, 144, 190] };
+
+function themeColours(el) {
+  const cs = getComputedStyle(el);
+  const read = (name, fb) => {
+    const v = cs.getPropertyValue(name).split(',').map((x) => Number(x.trim()));
+    return v.length === 3 && v.every(Number.isFinite) ? v : fb;
+  };
+  return { live: read('--line-live', FALLBACK.live), guide: read('--line-guide', FALLBACK.guide), idle: read('--line-idle', FALLBACK.idle) };
+}
 
 function rgba(c, a) { return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${a})`; }
 
@@ -100,10 +108,28 @@ class BreathLines {
     }
   }
 
+  // A soft, warm glow under the live ribbon, stronger as the breath rises.
+  glow(w, h, color, level) {
+    const ctx = this.ctx;
+    const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.5);
+    g.addColorStop(0, rgba(color, 0.10 + 0.12 * level));
+    g.addColorStop(1, rgba(color, 0));
+    ctx.save();
+    ctx.translate(0, h / 2);
+    ctx.scale(1, 0.45);
+    ctx.translate(0, -h / 2);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
   draw() {
     const { w, h, dpr } = this.resize();
     const ctx = this.ctx;
     ctx.clearRect(0, 0, w, h);
+    const now = performance.now();
+    if (!this.colours || now - (this.coloursAt || 0) > 500) { this.colours = themeColours(this.canvas); this.coloursAt = now; }
+    const { live: TEAL, guide: LAVENDER, idle: GREY } = this.colours;
     const hasLive = this.live != null;
     const hasGuide = this.guide != null;
     if (!hasLive && !hasGuide) {
@@ -112,7 +138,10 @@ class BreathLines {
       return;
     }
     if (hasGuide) this.ribbon(w, h, dpr, this.guideNow, LAVENDER, hasLive ? Math.round(this.lines * 0.5) : this.lines, 0.06, hasLive ? 0.35 : 0.7, 0.9);
-    if (hasLive) this.ribbon(w, h, dpr, this.liveNow, TEAL, this.lines, 0.08, 0.9, 0);
+    if (hasLive) {
+      this.glow(w, h, TEAL, this.liveNow);
+      this.ribbon(w, h, dpr, this.liveNow, TEAL, this.lines, 0.08, 0.9, 0);
+    }
   }
 }
 

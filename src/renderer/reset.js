@@ -128,7 +128,7 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
       } else {
         els.rate.textContent = 'Waiting for a steady signal';
       }
-      const coach = usable ? exhaleCoaching(live.latestRatio(), config.targetExhaleRatio) : null;
+      const coach = usable ? exhaleCoaching(live.latestRatio(), Math.max(1, pattern.exhale / pattern.inhale)) : null;
       els.ratio.innerHTML = coach ? `<span class="t-num">${esc(coach.label)}</span> <span class="t-2">${esc(coach.tip.toLowerCase())}</span>` : 'Waiting for a steady signal';
     }
 

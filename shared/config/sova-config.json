@@ -61,11 +61,31 @@
   },
 
   "breathingPatterns": [
-    { "id": "calm-6",  "name": "Calm, 6 per minute", "inhale": 4, "hold": 0, "exhale": 6, "holdAfterExhale": 0 },
-    { "id": "box-4",   "name": "Box, 4-4-4-4",       "inhale": 4, "hold": 4, "exhale": 4, "holdAfterExhale": 4 },
-    { "id": "long-out","name": "Long exhale",        "inhale": 4, "hold": 2, "exhale": 8, "holdAfterExhale": 0 }
+    { "id": "calm-6",  "name": "Calm, 6 per minute", "inhale": 4, "hold": 0, "exhale": 6, "holdAfterExhale": 0, "note": "Relaxing 4-6, long exhales to unwind" },
+    { "id": "box-4",   "name": "Box, 4-4-4-4",       "inhale": 4, "hold": 4, "exhale": 4, "holdAfterExhale": 4, "note": "Steady focus under pressure" },
+    { "id": "long-out","name": "Long exhale",        "inhale": 4, "hold": 2, "exhale": 8, "holdAfterExhale": 0, "note": "Slows things down fast" },
+    { "id": "478",     "name": "4-7-8 breathing",    "inhale": 4, "hold": 7, "exhale": 8, "holdAfterExhale": 0, "note": "Deep calm, good before sleep" },
+    { "id": "coherent-5", "name": "Coherent 5-5",    "inhale": 5, "hold": 0, "exhale": 5, "holdAfterExhale": 0, "note": "Even and steady" },
+    { "id": "triangle", "name": "Triangle 4-4-4",    "inhale": 4, "hold": 4, "exhale": 4, "holdAfterExhale": 0, "note": "A gentle start with breath holds" }
   ],
   "breathingDurationsSeconds": [30, 60, 120, 300],
+  "resetLengthSeconds": { "min": 30, "max": 600, "step": 30 },
+  "situations": [
+    { "id": "overwhelmed", "name": "Overwhelmed right now", "meta": "Steady in 90 seconds", "patternId": "long-out", "seconds": 90 },
+    { "id": "before-stress", "name": "Before something stressful", "meta": "Steady before you walk in", "patternId": "box-4", "seconds": 180 },
+    { "id": "between-meetings", "name": "Between meetings", "meta": "Put the last hour down", "patternId": "calm-6", "seconds": 120 },
+    { "id": "wind-down", "name": "Winding down", "meta": "End the work day", "patternId": "478", "seconds": 180 },
+    { "id": "tired-eyes", "name": "Tired eyes", "meta": "A 20-second look-away", "eyeRest": true }
+  ],
+  "goals": [
+    { "id": "focus", "name": "Sharpen focus", "meta": "Steady attention at work", "icon": "crosshair", "presetId": "deep-work" },
+    { "id": "study", "name": "Study better", "meta": "Shorter blocks, regular breaks", "icon": "timer", "presetId": "studying" },
+    { "id": "stress", "name": "Let go of stress", "meta": "Notice tension and reset sooner", "icon": "wind", "patternId": "long-out" },
+    { "id": "calm", "name": "Settle a racing mind", "meta": "Slow, even breathing", "icon": "waves", "patternId": "calm-6" },
+    { "id": "eyes", "name": "Rest my eyes", "meta": "Regular look-away reminders", "icon": "eye" },
+    { "id": "exploring", "name": "Just exploring", "meta": "Start with the basics", "icon": "circle-dot" }
+  ],
+  "feelings": ["Calm", "Focused", "Tense", "Tired", "Scattered"],
   "defaultBreathingSeconds": 60,
   "targetExhaleRatio": 1.5,
   "afterResetWaitSeconds": 60,

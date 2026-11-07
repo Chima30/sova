@@ -33,7 +33,7 @@ const SUPPRESSION_TEXT = {
 const RING_C = 2 * Math.PI * 130;
 
 class LiveSession {
-  constructor({ config, settings, preset, apiKey, onEnd }) {
+  constructor({ config, settings, preset, apiKey, onEnd, checkIn = null }) {
     // Personal sensitivity settings are applied on top of the shared config.
     const eff = applyOverrides(config, preset, settings.cueOverrides);
     config = eff.config;
@@ -42,6 +42,7 @@ class LiveSession {
     this.settings = settings;
     this.preset = preset;
     this.onEnd = onEnd;
+    this.checkIn = checkIn;   // how you said you felt on Home, if recent
     this.startedAtIso = new Date().toISOString();
     this.id = `s_${Date.now().toString(36)}`;
     this.mode = apiKey && navigator.onLine ? 'live' : 'timer';
@@ -446,6 +447,7 @@ class LiveSession {
       cameraPaused: this.cameraPaused,
       line,
       trace,
+      theme: document.documentElement.dataset.theme || 'dark',
     });
   }
 
@@ -546,8 +548,8 @@ class LiveSession {
 
   // ---- user actions -------------------------------------------------------
 
-  startReset(seconds) {
-    const pattern = this.currentPattern();
+  startReset(seconds, patternOverride) {
+    const pattern = patternOverride || this.currentPattern();
     this.engine.pause('reset');
     openReset({
       config: this.config,
@@ -635,6 +637,7 @@ class LiveSession {
       events: this.events,
       reflection: null,
       ai,
+      checkIn: this.checkIn,
     };
     this.onEnd && this.onEnd(record);
   }
@@ -690,7 +693,7 @@ class LiveSession {
         <section class="panel stack" style="align-items: stretch">
           <div style="position: relative">
             <video id="preview" autoplay playsinline muted aria-label="Camera preview, shown only during the signal check" style="width: 100%; aspect-ratio: 16 / 10; object-fit: cover; transform: scaleX(-1); border-radius: var(--r-card); background: var(--bg-deep); display: block"></video>
-            <svg viewBox="0 0 160 100" preserveAspectRatio="none" aria-hidden="true" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none"><ellipse cx="80" cy="44" rx="20" ry="26" fill="none" stroke="rgba(240,238,233,0.35)" stroke-width="0.4" stroke-dasharray="2 2"/><path d="M48 100 C 52 78, 108 78, 112 100" fill="none" stroke="rgba(240,238,233,0.25)" stroke-width="0.4" stroke-dasharray="2 2"/></svg>
+            <svg viewBox="0 0 160 100" preserveAspectRatio="none" aria-hidden="true" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none"><ellipse cx="80" cy="44" rx="20" ry="26" fill="none" style="stroke: var(--text-2)" opacity="0.6" stroke-width="0.4" stroke-dasharray="2 2"/><path d="M48 100 C 52 78, 108 78, 112 100" fill="none" style="stroke: var(--text-2)" opacity="0.45" stroke-width="0.4" stroke-dasharray="2 2"/></svg>
           </div>
           <div class="row-between">
             <span class="status"><span class="dot warn" id="quality-dot"></span><span id="quality-tip">Starting the camera</span></span>
@@ -734,7 +737,7 @@ class LiveSession {
     const ticks = Array.from({ length: 60 }, (_, i) => {
       const a = (i / 60) * Math.PI * 2;
       const r1 = 146, r2 = i % 5 === 0 ? 138 : 142;
-      return `<line x1="${150 + r1 * Math.sin(a)}" y1="${150 - r1 * Math.cos(a)}" x2="${150 + r2 * Math.sin(a)}" y2="${150 - r2 * Math.cos(a)}" stroke="rgba(240,238,233,${i % 5 === 0 ? 0.22 : 0.09})" stroke-width="1"/>`;
+      return `<line x1="${150 + r1 * Math.sin(a)}" y1="${150 - r1 * Math.cos(a)}" x2="${150 + r2 * Math.sin(a)}" y2="${150 - r2 * Math.cos(a)}" style="stroke: var(--text-2)" opacity="${i % 5 === 0 ? 0.4 : 0.16}" stroke-width="1"/>`;
     }).join('');
     $('#view').innerHTML = `
       <div class="page-head">
@@ -750,8 +753,8 @@ class LiveSession {
           <div class="ring">
             <svg viewBox="0 0 300 300" role="img" aria-label="Time left in this phase">
               ${ticks}
-              <circle cx="150" cy="150" r="128" stroke="rgba(240,238,233,0.08)" stroke-width="2" fill="none"/>
-              <circle class="ring-arc" id="ring-arc" cx="150" cy="150" r="128" stroke="#5fcfc3" stroke-width="3" fill="none" stroke-linecap="round" stroke-dasharray="${RING_C}" stroke-dashoffset="0" transform="rotate(-90 150 150)"/>
+              <circle cx="150" cy="150" r="128" style="stroke: var(--hair-2)" stroke-width="2" fill="none"/>
+              <circle class="ring-arc" id="ring-arc" cx="150" cy="150" r="128" style="stroke: var(--accent); filter: drop-shadow(0 0 6px var(--accent-soft))" stroke-width="3" fill="none" stroke-linecap="round" stroke-dasharray="${RING_C}" stroke-dashoffset="0" transform="rotate(-90 150 150)"/>
             </svg>
             <div class="ring-center"><span class="clock" id="clock" aria-live="off">--:--</span><span class="t-small" id="clock-sub"></span></div>
           </div>
@@ -851,7 +854,7 @@ class LiveSession {
     $('#block-label').textContent = `${e.phase === 'focus' ? 'Focus' : 'Break'} · block ${e.block} of ${this.preset.blocks} · ${Math.floor(e.completedFocusSeconds / 60)} min focused`;
     const frac = Math.max(0, Math.min(1, e.remaining / Math.max(1, total)));
     $('#ring-arc').setAttribute('stroke-dashoffset', String(RING_C * (1 - frac)));
-    $('#ring-arc').setAttribute('stroke', e.phase === 'focus' ? '#5fcfc3' : '#b3a9e6');
+    $('#ring-arc').style.stroke = e.phase === 'focus' ? 'var(--accent)' : 'var(--lavender)';
     $('#pause').innerHTML = e.pauses.has('manual') ? `${icon('play', 18)}<span>Resume</span>` : `${icon('pause', 18)}<span>Pause</span>`;
     $('#meeting').setAttribute('aria-pressed', String(this.cue.manualMeeting));
     $('#meeting').querySelector('span').textContent = this.cue.manualMeeting ? 'End meeting' : 'Meeting';
