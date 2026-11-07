@@ -1,8 +1,12 @@
 # SOVA
 
+When you're deep in focus, you don't notice your breathing speed up, your blinking slow down, or two hours pass without a break, until you're already drained.
+
+SOVA watches your breathing, pulse and blinking through your webcam with Presage's [SmartSpectra SDK](https://smartspectra.presagetech.com/docs), and suggests a breathing reset, an eye rest or a break at the right moment.
+
 **Stay in focus. Stay in tune.**
 
-SOVA is a personal focus and recovery workstation. During a focus session it reads breathing rate, pulse, HRV, blinking, talking and face presence through your camera with the [Presage SmartSpectra SDK](https://smartspectra.presagetech.com/docs), then suggests breathing resets, eye rests and recovery breaks at the right moments.
+SOVA is a personal focus and recovery workstation. During a focus session it reads breathing rate, pulse, HRV, blinking, talking and face presence through your camera, then compares them with your own baseline to time its suggestions.
 
 SOVA is not a medical application, diagnostic tool, stress detector or productivity surveillance system. It is a personal self-reflection and focus companion.
 
