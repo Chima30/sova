@@ -1,8 +1,9 @@
 name: Windows installer
 
-# Builds SOVA-Setup.exe on a Windows machine.
-# - Every push to main: installer available as a workflow artifact.
-# - A version tag (v*): installer attached to a GitHub Release.
+# Builds SOVA-Setup.exe on a Windows machine on every push to main.
+# - The installer is always uploaded as a workflow artifact.
+# - If package.json has a version with no release yet (for example 0.3.0 and
+#   no v0.3.0 release), a GitHub Release is published with the installer.
 
 on:
   push:
@@ -46,11 +47,15 @@ jobs:
           path: release/SOVA-Setup-*.exe
           if-no-files-found: error
 
-      - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish release for a new version
+        if: github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $tag = "v$version"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) { Write-Host "Release $tag already exists, nothing to publish."; exit 0 }
           $exe = Get-ChildItem release/SOVA-Setup-*.exe | Select-Object -First 1
-          gh release create "${{ github.ref_name }}" $exe.FullName --title "SOVA ${{ github.ref_name }}" --notes-file RELEASE_NOTES.md
+          gh release create $tag $exe.FullName --target $env:GITHUB_SHA --title "SOVA $tag" --notes-file RELEASE_NOTES.md
