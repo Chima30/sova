@@ -1,0 +1,76 @@
+{
+  "name": "sova",
+  "productName": "SOVA",
+  "version": "0.1.0",
+  "description": "SOVA: a personal focus and recovery workstation. Stay in focus. Stay in tune.",
+  "author": "John Madubuike Chimaobi <johnchimz15@gmail.com>",
+  "private": true,
+  "main": "src/main/main.js",
+  "scripts": {
+    "build:renderer": "esbuild src/renderer/app.js --bundle --outfile=dist/renderer.js --platform=browser --format=iife --log-level=warning",
+    "build:preload": "esbuild src/preload/preload.js --bundle --outfile=dist/preload.js --platform=node --external:electron --format=cjs --log-level=warning",
+    "build": "npm run build:renderer && npm run build:preload",
+    "start": "npm run build && electron .",
+    "test": "node --test test/*.test.js",
+    "dist:win": "npm run build && electron-builder --win --x64",
+    "dist:mac": "npm run build && electron-builder --mac --arm64",
+    "dist:linux": "npm run build && electron-builder --linux --x64"
+  },
+  "dependencies": {
+    "@smartspectra/node-sdk": "3.4.0"
+  },
+  "devDependencies": {
+    "electron": "^43.2.0",
+    "electron-builder": "^26.6.0",
+    "esbuild": "^0.25.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "build": {
+    "appId": "app.sova.desktop",
+    "productName": "SOVA",
+    "files": [
+      "src/main/**",
+      "src/renderer/index.html",
+      "src/renderer/styles.css",
+      "shared/**",
+      "dist/**",
+      "node_modules/**",
+      "!node_modules/@smartspectra/node-sdk-*/**",
+      "!node_modules/@smartspectra/node-sdk/scripts/**",
+      "!node_modules/@smartspectra/node-sdk/test/**",
+      "!node_modules/@smartspectra/node-sdk/samples/**",
+      "!node_modules/@smartspectra/node-sdk/prebuilds/**"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSCameraUsageDescription": "SOVA uses the camera during focus sessions to estimate breathing, pulse and HRV on this device. No video is saved."
+      },
+      "extraResources": [
+        { "from": "node_modules/@smartspectra/node-sdk-darwin-${arch}/", "to": "smartspectra" }
+      ]
+    },
+    "win": {
+      "target": "nsis",
+      "extraResources": [
+        { "from": "node_modules/@smartspectra/node-sdk-win32-${arch}/", "to": "smartspectra" }
+      ]
+    },
+    "nsis": {
+      "artifactName": "SOVA-Setup-${version}.${ext}"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Utility",
+      "extraResources": [
+        { "from": "node_modules/@smartspectra/node-sdk-linux-${arch}/", "to": "smartspectra" }
+      ]
+    },
+    "asar": true
+  }
+}

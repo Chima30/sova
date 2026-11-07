@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; media-src blob:; img-src 'self' data:; connect-src 'self';">
+  <title>SOVA</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="splash" class="splash" role="status" aria-live="polite">
+    <div class="splash-mark">SOVA</div>
+    <div class="splash-tag">Stay in focus. Stay in tune.</div>
+  </div>
+
+  <div id="app" class="app" hidden>
+    <nav class="sidebar" aria-label="Main">
+      <div class="brand">SOVA</div>
+      <button class="nav" data-nav="home">Home</button>
+      <button class="nav" data-nav="focus">Focus</button>
+      <button class="nav" data-nav="recovery">Recovery</button>
+      <button class="nav" data-nav="insights">Insights</button>
+      <button class="nav" data-nav="history">History</button>
+      <button class="nav" data-nav="sounds">Sounds</button>
+      <button class="nav" data-nav="settings">Settings</button>
+      <div class="sidebar-foot" id="shortcut-hint"></div>
+    </nav>
+    <main id="view" class="view" tabindex="-1"></main>
+  </div>
+
+  <div id="overlay" class="overlay" hidden></div>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <div id="sr-live" class="sr-only" aria-live="assertive"></div>
+
+  <script src="../../dist/renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,80 @@
+{
+  "configVersion": 1,
+  "consentVersion": 1,
+
+  "signals": {
+    "pulse":     { "minConfidence": 45, "warmupSeconds": 12, "validMin": 40, "validMax": 110 },
+    "breathing": { "minConfidence": 45, "warmupSeconds": 30, "validMin": 5,  "validMax": 40 },
+    "hrv":       { "minConfidence": 45, "warmupSeconds": 60 },
+    "staleAfterSeconds": 6
+  },
+
+  "baseline": {
+    "durationSeconds": 120,
+    "minUsableSamples": 20
+  },
+
+  "cues": {
+    "tension": {
+      "windowSeconds": 180,
+      "requiredFraction": 0.8,
+      "breathingRisePct": 20,
+      "pulseRiseBpm": 8,
+      "hrvDropPct": 25
+    },
+    "eyeRest": {
+      "minScreenMinutes": 25,
+      "blinkDropPct": 35,
+      "blinkWindowSeconds": 120
+    },
+    "cooldownMinutes": 10,
+    "typingPauseSeconds": 3,
+    "typingPauseMaxWaitSeconds": 90,
+    "flowSnoozeMinutes": 20
+  },
+
+  "smartPauses": {
+    "meetingTalkingWindowSeconds": 20,
+    "meetingTalkingFraction": 0.3,
+    "meetingHoldMinutes": 3,
+    "awayAfterSeconds": 60
+  },
+
+  "breaks": {
+    "tenseExtraPct": 50,
+    "calmReducePct": 20,
+    "minBreakMinutes": 3
+  },
+
+  "presets": [
+    { "id": "deep-work",  "name": "Deep Work",     "focusMinutes": 50, "breakMinutes": 10, "blocks": 3, "sensitivity": "gentle",   "eyeRestEveryMinutes": 30, "sound": "rain" },
+    { "id": "studying",   "name": "Studying",      "focusMinutes": 25, "breakMinutes": 5,  "blocks": 4, "sensitivity": "standard", "eyeRestEveryMinutes": 25, "sound": "none" },
+    { "id": "reading",    "name": "Reading",       "focusMinutes": 40, "breakMinutes": 8,  "blocks": 3, "sensitivity": "standard", "eyeRestEveryMinutes": 20, "sound": "none" },
+    { "id": "creative",   "name": "Creative Work", "focusMinutes": 45, "breakMinutes": 10, "blocks": 3, "sensitivity": "minimal",  "eyeRestEveryMinutes": 30, "sound": "forest" },
+    { "id": "general",    "name": "General Work",  "focusMinutes": 30, "breakMinutes": 5,  "blocks": 4, "sensitivity": "standard", "eyeRestEveryMinutes": 25, "sound": "none" }
+  ],
+
+  "sensitivity": {
+    "gentle":   { "multiplier": 1.25, "label": "Gentle" },
+    "standard": { "multiplier": 1.0,  "label": "Standard" },
+    "minimal":  { "multiplier": 1.6,  "label": "Minimal" }
+  },
+
+  "breathingPatterns": [
+    { "id": "calm-6",  "name": "Calm, 6 per minute", "inhale": 4, "hold": 0, "exhale": 6, "holdAfterExhale": 0 },
+    { "id": "box-4",   "name": "Box, 4-4-4-4",       "inhale": 4, "hold": 4, "exhale": 4, "holdAfterExhale": 4 },
+    { "id": "long-out","name": "Long exhale",        "inhale": 4, "hold": 2, "exhale": 8, "holdAfterExhale": 0 }
+  ],
+  "breathingDurationsSeconds": [30, 60, 120, 300],
+  "defaultBreathingSeconds": 60,
+  "targetExhaleRatio": 1.5,
+  "afterResetWaitSeconds": 60,
+
+  "eyeRestSeconds": 20,
+
+  "shortcuts": { "quickReset": "CommandOrControl+Shift+B" },
+
+  "storage": {
+    "retainSessionsDays": 365
+  }
+}
