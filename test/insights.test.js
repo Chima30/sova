@@ -89,3 +89,22 @@ test('patterns report only what the data supports', () => {
   assert.ok(ids.includes('reset-effect'));
   assert.ok(!ids.includes('trend'), 'needs 10 sessions');
 });
+
+const { allResets, exhaleTrend } = require('../shared/core/breathHistory');
+const { toCSV } = require('../shared/core/exporter');
+
+test('breathing history merges session and Recovery resets, newest first', () => {
+  const sessions = [session('2026-11-02T09:00:00.000Z')];
+  sessions[0].events.find((e) => e.type === 'reset').breathSound = { enough: true, avgExhale: 4.2, targetExhale: 6, heardExhales: 5 };
+  const standalone = [
+    { id: 'r1', at: '2026-11-07T12:00:00.000Z', seconds: 60, completed: true, patternId: 'calm-6', breathSound: { enough: true, avgExhale: 5.1, targetExhale: 6, heardExhales: 6 } },
+    { id: 'r2', at: '2026-11-05T12:00:00.000Z', seconds: 30, completed: false, patternId: 'box-4', breathSound: { enough: false, heardExhales: 1 } },
+  ];
+  const all = allResets(sessions, standalone);
+  assert.deepEqual(all.map((r) => r.source), ['recovery', 'recovery', 'session']);
+  const trend = exhaleTrend(all);
+  assert.deepEqual(trend.map((t) => t.avgExhale), [4.2, 5.1], 'oldest first, unmeasured resets left out');
+  const csv = toCSV(sessions, standalone);
+  assert.match(csv, /# Breathing resets/);
+  assert.match(csv, /2026-11-07T12:00:00.000Z,recovery,,calm-6,60,true,6,,5.1,6/);
+});

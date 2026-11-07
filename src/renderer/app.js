@@ -10,6 +10,7 @@ const { weekly, beforeAfter, patterns } = require('../../shared/core/insights');
 const { renderTimeline } = require('./timeline');
 const audio = require('./audio');
 const { cleanOverrides, LIMITS } = require('../../shared/core/overrides');
+const { allResets, exhaleTrend } = require('../../shared/core/breathHistory');
 
 const PRIVACY_POLICY = 'https://api.physiology.presagetech.com/privacypolicy';
 const KEY_PORTAL = 'https://physiology.presagetech.com/auth/register';
@@ -144,7 +145,24 @@ async function startSession() {
 function quickReset() {
   if (!$('#overlay').hidden) return;
   if (state.session && !state.session.ended && state.session.phaseUi === 'running') return state.session.startReset();
-  openReset({ config: state.config, settings: state.settings, pattern: currentPattern(), seconds: state.resetSeconds, live: null, onDone: () => {} });
+  const pattern = currentPattern();
+  const startedAt = new Date().toISOString();
+  openReset({
+    config: state.config, settings: state.settings, pattern, seconds: state.resetSeconds, live: null,
+    onDone: async (res) => {
+      if (res.seconds < 10) return;   // ended almost immediately: nothing worth keeping
+      await window.sova.saveReset({
+        id: `r_${Date.now().toString(36)}`,
+        at: startedAt,
+        seconds: res.seconds,
+        completed: res.completed,
+        patternId: pattern.id || 'custom',
+        pattern: { inhale: pattern.inhale, hold: pattern.hold || 0, exhale: pattern.exhale, holdAfterExhale: pattern.holdAfterExhale || 0 },
+        breathSound: res.breathSound || null,
+      });
+      if (state.view === 'history') VIEWS.history();
+    },
+  });
 }
 
 function currentPattern() {
@@ -391,31 +409,70 @@ const VIEWS = {
 
   async history() {
     const sessions = await window.sova.listSessions();
+    const tab = state.historyTab || 'sessions';
     const w = weekly(sessions);
-    $('#view').innerHTML = `
-      <h1>History</h1>
-      <p class="lead">Your sessions, stored only on this computer.</p>
-      <section class="card stack" style="margin-bottom: 18px">
-        <h2 style="margin: 0">Consistency this week</h2>
-        <div class="grid">
-          <div><div class="num" style="font-size: 26px">${w.sessions}</div><div class="small">Sessions</div></div>
-          <div><div class="num" style="font-size: 26px">${w.eyeRests}</div><div class="small">Eye rests taken</div></div>
-          <div><div class="num" style="font-size: 26px">${w.breaksTaken}${w.breaksStarted ? ` of ${w.breaksStarted}` : ''}</div><div class="small">Breaks taken</div></div>
-          <div><div class="num" style="font-size: 26px">${w.resets}</div><div class="small">Resets attempted</div></div>
-          <div><div class="num" style="font-size: 26px">${w.blocksFinished}</div><div class="small">Focus blocks finished</div></div>
-        </div>
-        <span class="small">No streaks. Rest days are part of the rhythm.</span>
-      </section>
-      ${sessions.length ? `<ul class="list">${sessions.map((s) => `
-        <li><button class="preset" style="width: 100%; min-height: 64px" data-sid="${esc(s.id)}">
-          <strong>${esc(s.presetName)}</strong>
-          <span>${esc(fmtDate(s.startedAt))} · ${esc(fmtMinutes(s.focusSeconds))}${s.reflection && s.reflection.tags && s.reflection.tags.length ? ` · ${esc(s.reflection.tags.join(', '))}` : ''}${s.mode === 'timer' ? ' · timer only' : ''}</span>
-          ${s.reflection && s.reflection.note ? `<span style="color: var(--text-2)">${esc(s.reflection.note)}</span>` : ''}
-        </button></li>`).join('')}</ul>` : '<p class="small">No sessions yet. Start one from Focus.</p>'}`;
-    $$('[data-sid]').forEach((b) => b.addEventListener('click', () => {
-      const s = sessions.find((x) => x.id === b.dataset.sid);
-      if (s) showSummary(s);
-    }));
+    const tabs = `<div class="row" role="tablist" aria-label="History" style="margin-bottom: 18px">
+        <button class="chip" role="tab" aria-selected="${tab === 'sessions'}" aria-checked="${tab === 'sessions'}" data-htab="sessions">Sessions</button>
+        <button class="chip" role="tab" aria-selected="${tab === 'breathing'}" aria-checked="${tab === 'breathing'}" data-htab="breathing">Breathing</button>
+      </div>`;
+    if (tab === 'breathing') {
+      const resets = allResets(sessions, await window.sova.listResets()).filter((r) => r.seconds >= 10);
+      const trend = exhaleTrend(resets);
+      const maxV = Math.max(1, ...trend.map((t) => Math.max(t.avgExhale, t.target)));
+      const patternName = (id) => (state.config.breathingPatterns.find((p) => p.id === id) || { name: id === 'custom' ? 'Custom' : (id || 'Breathing reset') }).name;
+      $('#view').innerHTML = `
+        <h1>History</h1>
+        <p class="lead">Every breathing reset, from Recovery and from focus sessions, stored only on this computer.</p>
+        ${tabs}
+        <section class="card stack" style="margin-bottom: 18px">
+          <h2 style="margin: 0">Exhale length over time</h2>
+          ${trend.length >= 2 ? `
+          <div style="display: flex; align-items: flex-end; gap: 10px; height: 150px; padding-top: 10px" role="img" aria-label="Average exhale length per reset compared with the target">
+            ${trend.map((t) => `<div style="flex: 1; max-width: 48px; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; position: relative">
+              <div style="position: relative; width: 100%; height: ${Math.max(22, Math.round((t.avgExhale / maxV) * 110))}px; border-radius: 6px 6px 2px 2px; background: #7FA6E8; display: flex; justify-content: center"><span style="font-size: 12px; font-weight: 600; color: #0B1220; padding-top: 4px">${t.avgExhale}</span></div>
+              <div title="Target ${t.target} s" style="position: absolute; left: -3px; right: -3px; bottom: ${Math.round((t.target / maxV) * 110) + 24}px; border-top: 2px dashed #9AA6BC"></div>
+              <span class="small">${esc(new Date(t.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}</span></div>`).join('')}
+          </div>
+          <div class="legend" style="justify-content: flex-start; font-size: 13px"><span><span style="display: inline-block; width: 14px; height: 10px; border-radius: 3px; background: #7FA6E8"></span> Average exhale (s)</span><span><span class="swatch-dash"></span> Target exhale</span></div>`
+          : `<p class="small" style="margin: 0">The chart appears after 2 resets where the microphone heard at least 3 exhales. You have ${trend.length}.</p>`}
+        </section>
+        ${resets.length ? `<ul class="list">${resets.map((r) => `
+          <li><div class="card stack" style="width: 100%; gap: 8px">
+            <div class="row" style="justify-content: space-between">
+              <strong>${esc(patternName(r.patternId))} · ${r.seconds < 60 ? `${r.seconds} s` : `${Math.round(r.seconds / 6) / 10} min`}${r.completed ? '' : ' · ended early'}</strong>
+              <span class="small">${esc(fmtDate(r.at))} · ${r.source === 'recovery' ? 'From Recovery' : `During ${esc(r.sessionName)} session`}</span>
+            </div>
+            ${r.breathSound ? r.breathSound.lines.map((l) => `<span>${esc(l)}</span>`).join('') : '<span class="small">Microphone analysis was off for this reset.</span>'}
+            ${r.before && r.after && r.before.breathing != null && r.after.breathing != null ? `<span class="small">Breathing from the camera: ${Math.round(r.before.breathing)} → ${Math.round(r.after.breathing)} breaths/min, 60 seconds after.</span>` : ''}
+          </div></li>`).join('')}</ul>` : '<p class="small">No breathing resets yet. Start one from Recovery.</p>'}`;
+    } else {
+      $('#view').innerHTML = `
+        <h1>History</h1>
+        <p class="lead">Your sessions, stored only on this computer.</p>
+        ${tabs}
+        <section class="card stack" style="margin-bottom: 18px">
+          <h2 style="margin: 0">Consistency this week</h2>
+          <div class="grid">
+            <div><div class="num" style="font-size: 26px">${w.sessions}</div><div class="small">Sessions</div></div>
+            <div><div class="num" style="font-size: 26px">${w.eyeRests}</div><div class="small">Eye rests taken</div></div>
+            <div><div class="num" style="font-size: 26px">${w.breaksTaken}${w.breaksStarted ? ` of ${w.breaksStarted}` : ''}</div><div class="small">Breaks taken</div></div>
+            <div><div class="num" style="font-size: 26px">${w.resets}</div><div class="small">Resets in sessions</div></div>
+            <div><div class="num" style="font-size: 26px">${w.blocksFinished}</div><div class="small">Focus blocks finished</div></div>
+          </div>
+          <span class="small">No streaks. Rest days are part of the rhythm.</span>
+        </section>
+        ${sessions.length ? `<ul class="list">${sessions.map((s) => `
+          <li><button class="preset" style="width: 100%; min-height: 64px" data-sid="${esc(s.id)}">
+            <strong>${esc(s.presetName)}</strong>
+            <span>${esc(fmtDate(s.startedAt))} · ${esc(fmtMinutes(s.focusSeconds))}${s.reflection && s.reflection.tags && s.reflection.tags.length ? ` · ${esc(s.reflection.tags.join(', '))}` : ''}${s.mode === 'timer' ? ' · timer only' : ''}</span>
+            ${s.reflection && s.reflection.note ? `<span style="color: var(--text-2)">${esc(s.reflection.note)}</span>` : ''}
+          </button></li>`).join('')}</ul>` : '<p class="small">No sessions yet. Start one from Focus.</p>'}`;
+      $$('[data-sid]').forEach((b) => b.addEventListener('click', () => {
+        const x = sessions.find((y) => y.id === b.dataset.sid);
+        if (x) showSummary(x);
+      }));
+    }
+    $$('[data-htab]').forEach((b) => b.addEventListener('click', () => { state.historyTab = b.dataset.htab; VIEWS.history(); }));
   },
 
   sounds() {
@@ -519,6 +576,8 @@ const VIEWS = {
           <h2 style="margin: 0">Privacy and data</h2>
           <div class="row" style="justify-content: space-between"><span class="small">Sessions stored</span><span>${sum.sessions}</span></div>
           <div class="row" style="justify-content: space-between"><span class="small">Reflections and notes</span><span>${sum.reflections} / ${sum.notes}</span></div>
+          <div class="row" style="justify-content: space-between"><span class="small">Breathing resets from Recovery</span><span>${sum.resets}</span></div>
+          <div class="row" style="justify-content: space-between"><span class="small">Microphone audio</span><span style="color: var(--accent)">Never recorded</span></div>
           <div class="row" style="justify-content: space-between"><span class="small">Video or photos</span><span style="color: var(--accent)">None, ever</span></div>
           <div class="row" style="justify-content: space-between"><span class="small">Sent to Presage</span><span>Session sign-in${s.telemetry ? ' and anonymous diagnostics' : ' only'}</span></div>
           <label class="field">Breath sound analysis with the microphone (resets only, never recorded) <input type="checkbox" id="mic" ${s.micBreath ? 'checked' : ''}></label>
@@ -589,7 +648,7 @@ const VIEWS = {
     $('#exp-json').addEventListener('click', () => window.sova.exportData('json'));
     $('#del').addEventListener('click', () => toast({
       title: 'Delete all SOVA data?',
-      body: 'This removes every session, reflection, note, setting and your saved API key from this computer. It cannot be undone.',
+      body: 'This removes every session, breathing reset, reflection, note, AI reflection, setting and your saved API key from this computer. It cannot be undone.',
       actions: [
         { label: 'Delete everything', primary: true, onClick: async () => { await window.sova.deleteAll(); state.settings = await window.sova.getSettings(); announce('All data deleted'); showConsent(); } },
         { label: 'Cancel' },

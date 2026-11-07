@@ -43,6 +43,7 @@ class Store {
     fs.mkdirSync(dir, { recursive: true });
     this.settingsPath = path.join(dir, 'sova-settings.json');
     this.sessionsPath = path.join(dir, 'sova-sessions.json');
+    this.resetsPath = path.join(dir, 'sova-resets.json');
   }
 
   _read(file, fallback) {
@@ -90,8 +91,21 @@ class Store {
     return session;
   }
 
+  // Breathing resets started from Recovery, outside a focus session.
+  listResets() {
+    return this._read(this.resetsPath, []);
+  }
+
+  saveReset(r) {
+    const all = this.listResets().filter((x) => x.id !== r.id);
+    all.push(r);
+    all.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    this._write(this.resetsPath, all);
+    return r;
+  }
+
   deleteAll() {
-    for (const f of [this.settingsPath, this.sessionsPath]) {
+    for (const f of [this.settingsPath, this.sessionsPath, this.resetsPath]) {
       try { fs.unlinkSync(f); } catch { /* already gone */ }
     }
   }
@@ -101,6 +115,7 @@ class Store {
     const sessions = this.listSessions();
     return {
       sessions: sessions.length,
+      resets: this.listResets().length,
       reflections: sessions.filter((s) => s.reflection && (s.reflection.tags?.length || s.reflection.note)).length,
       notes: sessions.filter((s) => s.reflection && s.reflection.note).length,
       folder: this.dir,

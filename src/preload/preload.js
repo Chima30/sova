@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('sova', {
   clearApiKey: invoke('sova:apikey:clear'),
   listSessions: invoke('sova:sessions:list'),
   saveSession: invoke('sova:sessions:save'),
+  listResets: invoke('sova:resets:list'),
+  saveReset: invoke('sova:resets:save'),
   dataSummary: invoke('sova:data:summary'),
   exportData: invoke('sova:data:export'),
   deleteAll: invoke('sova:data:delete-all'),

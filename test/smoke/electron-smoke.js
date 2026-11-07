@@ -30,6 +30,11 @@ fs.writeFileSync(path.join(tmp, 'sova-sessions.json'), JSON.stringify([{
   reflection: { tags: ['Calm'], note: 'Smoke test note' },
 }]));
 
+fs.writeFileSync(path.join(tmp, 'sova-resets.json'), JSON.stringify([
+  { id: 'r_b', at: at(86400), seconds: 60, completed: true, patternId: 'calm-6', breathSound: { enough: true, avgExhale: 4.8, targetExhale: 6, heardExhales: 6, guidedBreaths: 6, lines: ['Your exhales averaged 4.8 s against a 6 s target (6 of about 6 heard).', 'Your exhales were steady from breath to breath.'] } },
+  { id: 'r_a', at: at(3600), seconds: 60, completed: true, patternId: 'calm-6', breathSound: { enough: true, avgExhale: 3.1, targetExhale: 6, heardExhales: 6, guidedBreaths: 6, lines: ['Your exhales averaged 3.1 s against a 6 s target (6 of about 6 heard).'] } },
+]));
+
 const errors = [];
 app.on('web-contents-created', (_e, wc) => {
   wc.on('console-message', (event) => {
@@ -118,6 +123,14 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('[data-nav="settings"]').click()`);
     await wait(500);
     report.aiToggle = await run(`!!document.getElementById('ai') && !!document.getElementById('mic')`);
+
+    // Breathing history tab.
+    await run(`document.querySelector('[data-nav="history"]').click()`);
+    await wait(400);
+    await run(`document.querySelector('[data-htab="breathing"]').click()`);
+    await wait(500);
+    report.breathingTab = await run(`document.querySelectorAll('#view .list > li').length + ' resets | chart: ' + !!document.querySelector('[aria-label^="Average exhale"]')`);
+    await shot(win, 'breathing.png');
 
     // Sounds play/stop.
     await run(`document.querySelector('[data-nav="sounds"]').click()`);

@@ -167,6 +167,8 @@ function registerIpc() {
 
   handle('sova:sessions:list', () => store.listSessions());
   handle('sova:sessions:save', (s) => store.saveSession(s));
+  handle('sova:resets:list', () => store.listResets());
+  handle('sova:resets:save', (r) => store.saveReset(r));
   handle('sova:data:summary', () => store.summary());
 
   handle('sova:data:export', async (format) => {
@@ -178,7 +180,7 @@ function registerIpc() {
       filters: [isCsv ? { name: 'CSV', extensions: ['csv'] } : { name: 'JSON', extensions: ['json'] }],
     });
     if (canceled || !filePath) return { ok: false };
-    const body = isCsv ? toCSV(sessions) : toJSON(sessions, publicSettings(store.getSettings()));
+    const body = isCsv ? toCSV(sessions, store.listResets()) : toJSON(sessions, publicSettings(store.getSettings()), store.listResets());
     fs.writeFileSync(filePath, body);
     return { ok: true, filePath };
   });
