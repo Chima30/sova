@@ -30,7 +30,11 @@ function toast({ title, body, actions, tone }) {
   el.setAttribute('role', 'status');
   el.innerHTML = `<strong>${esc(title)}</strong>${body ? `<p class="t-small">${esc(body)}</p>` : ''}<div class="row"></div>`;
   const row = el.querySelector('.row');
-  const close = () => el.remove();
+  const close = () => {
+    if (!el.isConnected) return;
+    el.classList.add('leaving');
+    setTimeout(() => el.remove(), 180);
+  };
   for (const a of actions || []) {
     const b = document.createElement('button');
     b.className = `btn${a.primary ? (tone === 'cue' ? ' btn-accent' : ' btn-primary') : ' btn-quiet'}`;
@@ -38,7 +42,14 @@ function toast({ title, body, actions, tone }) {
     b.addEventListener('click', () => { close(); if (a.onClick) a.onClick(); });
     row.appendChild(b);
   }
-  if (!(actions || []).length) setTimeout(close, 6000);
+  // Messages that only inform (no choice to make) close by themselves after
+  // 2 seconds, or once the pointer leaves them. Toasts asking for a decision stay.
+  const informOnly = (actions || []).every((a) => !a.onClick);
+  if (informOnly) {
+    let timer = setTimeout(close, 2000);
+    el.addEventListener('mouseenter', () => clearTimeout(timer));
+    el.addEventListener('mouseleave', () => { timer = setTimeout(close, 1200); });
+  }
   root.appendChild(el);
   announce(title);
   return close;

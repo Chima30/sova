@@ -405,3 +405,4 @@ button.row-item .row-aside { display: inline-flex; align-items: center; justify-
 .stepper { display: inline-flex; align-items: center; gap: 12px; }
 .btn.round { border-radius: 50%; }
 .sit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.toast.leaving { opacity: 0; transform: translateY(6px); transition: opacity 180ms var(--ease), transform 180ms var(--ease); }

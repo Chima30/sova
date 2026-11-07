@@ -907,7 +907,7 @@ class LiveSession {
       states.innerHTML = [
         `<span class="state-chip"><span class="dot ${face ? 'live' : 'off'}"></span>${face == null ? 'Face: waiting' : face ? 'Face in view' : 'No face found'}</span>`,
         `<span class="state-chip"><span class="dot ${this.talkingNow ? 'warn' : 'off'}"></span>${this.talkingNow ? 'Talking' : 'Quiet'}</span>`,
-        `<span class="state-chip">${icon('eye', 14)}${bpm != null ? `${Math.round(bpm)} blinks/min` : 'Blinks: learning'}</span>`,
+        `<span class="state-chip">${icon('eye', 14)}${bpm != null ? `${Math.round(bpm)} blink${Math.round(bpm) === 1 ? '' : 's'}/min` : 'Blinks: learning'}</span>`,
         this.cue.inMeeting(t) ? `<span class="state-chip">${icon('users', 14)}Meeting</span>` : '',
       ].join('');
     }

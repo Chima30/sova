@@ -123,7 +123,8 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('[data-tag="Productive"]').click(); document.getElementById('note').value = 'smoke'; document.getElementById('save').click()`);
     await wait(800);
     await shot(win, 'summary.png');
-    report.summaryFeeling = await run(`document.querySelector('#view .page-head .t-small').textContent`);
+    await wait(400);
+    report.summaryFeeling = await run(`(document.querySelector('#view .page-head .t-small') || {}).textContent || 'missing'`);
     report.summary = await run(`document.querySelector('#view h1').textContent + ' | timeline: ' + !!document.querySelector('#view [role=img]')`);
     report.widgetClosed = !BrowserWindow.getAllWindows().some((w) => w.webContents.getURL().includes('widget.html'));
 

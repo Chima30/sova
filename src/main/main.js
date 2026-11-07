@@ -49,11 +49,23 @@ function isWidgetPage(url) {
 
 // ---- Floating focus widget --------------------------------------------------
 
+// The widget is for when you are working in other apps: it hides while the
+// SOVA window itself is in front, and comes back when you switch away.
+function mainInFront() {
+  return !!(win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() && win.isFocused());
+}
+
+function syncWidget() {
+  if (!widget || widget.isDestroyed()) return;
+  if (mainInFront()) widget.hide();
+  else if (!widget.isVisible()) widget.showInactive();
+}
+
 function showWidget() {
   if (widgetHiddenByUser) return;
-  if (widget && !widget.isDestroyed()) { widget.showInactive(); return; }
+  if (widget && !widget.isDestroyed()) { syncWidget(); return; }
   const area = screen.getPrimaryDisplay().workArea;
-  const W = 340, H = 168;
+  const W = 300, H = 112;
   widget = new BrowserWindow({
     title: 'SOVA',
     width: W,
@@ -68,7 +80,8 @@ function showWidget() {
     skipTaskbar: true,
     alwaysOnTop: true,
     show: false,
-    backgroundColor: '#121A2B',
+    transparent: true,
+    backgroundColor: '#00000000',
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'widget-preload.js'),
       contextIsolation: true,
@@ -79,7 +92,7 @@ function showWidget() {
   widget.setAlwaysOnTop(true, 'floating');
   widget.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   widget.webContents.on('will-navigate', (e) => e.preventDefault());
-  widget.once('ready-to-show', () => widget.showInactive());
+  widget.once('ready-to-show', syncWidget);
   widget.on('closed', () => { widget = null; });
   widget.loadFile(path.join(__dirname, '..', 'renderer', 'widget.html'));
 }
@@ -96,7 +109,7 @@ function createWindow() {
     height: 840,
     minWidth: 880,
     minHeight: 640,
-    backgroundColor: '#0B1220',
+    backgroundColor: '#12102a',
     show: false,
     webPreferences: {
       preload: path.join(__dirname, '..', '..', 'dist', 'preload.js'),
@@ -119,6 +132,7 @@ function createWindow() {
 
   win.once('ready-to-show', () => win.show());
   win.on('page-title-updated', (e) => e.preventDefault());
+  for (const ev of ['focus', 'blur', 'minimize', 'restore', 'hide', 'show']) win.on(ev, () => setTimeout(syncWidget, 50));
   win.loadFile(RENDERER_INDEX);
 }
 
