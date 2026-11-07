@@ -128,7 +128,7 @@ Packaging follows Presage's guide: the platform runtime folder is copied to `res
 
 **Confidence rule.** A value is shown or used only when its analysis window has filled, its confidence passes the threshold in `shared/config/sova-config.json` (45 by default, the documented breathing accuracy threshold), the SDK marks it stable, and it sits inside the documented valid range. Otherwise SOVA hides it and explains why. SOVA never estimates, smooths over or invents a reading, and never shows the SDK's stress index.
 
-SOVA does not use the SDK's `requestInsight` AI feature.
+SOVA does not call the SDK's `requestInsight` AI feature. Note that the SDK sends derived vitals to Presage's AI service automatically during sessions; see Consent and data handling.
 
 ## Consent and data handling
 
@@ -140,8 +140,9 @@ SOVA does not use the SDK's `requestInsight` AI feature.
 
 **Processing and sharing**
 - The SmartSpectra SDK computes every signal on the user's computer. Video and images are never recorded, saved or uploaded.
-- The SDK connects to Presage's service to authenticate each measurement session with the user's own API key (Presage counts usage on that key) and to fetch its processing models. SOVA itself sends no data anywhere.
-- Nothing is shared with any other party. No accounts, no cloud sync, no analytics, no ads.
+- The SDK connects to Presage's service to authenticate each measurement session with the user's own API key (Presage counts usage on that key) and to fetch its processing models.
+- **Presage vitals insights:** according to [Presage's LLM Insights documentation](https://github.com/Presage-Security/SmartSpectra/blob/main/docs/llm-insights/index.md), while a measurement session runs the SDK automatically sends derived values (pulse rate, HRV and breathing rate, plus a session ID) to Presage, which forwards them to a large language model to produce short "vitals check-ins": once when each signal first becomes stable, then every 60 seconds. No video or facial images are sent. This is built into the SDK and cannot be switched off by SOVA. SOVA does not show these check-ins.
+- SOVA itself sends nothing else anywhere. Nothing is shared with any other party. No accounts, no cloud sync, no analytics, no ads.
 
 **Storage, retention and deletion**
 - Stored on the user's computer only, as JSON in the app's data folder (on Windows `%APPDATA%\SOVA`): session summaries, personal baselines, session events (cues, resets, eye rests, pauses, 30-second tension samples), before-and-after values, reflections, notes and settings.
@@ -154,7 +155,7 @@ SOVA does not use the SDK's `requestInsight` AI feature.
 - When on, the SDK sends one aggregate summary per session: SDK version, platform and device model, session outcome, frame-rate and performance counts, and counts of quality warnings. It never includes video, images, measured values, or user or device identifiers. See [Presage's telemetry doc](https://github.com/Presage-Security/SmartSpectra/blob/main/docs/telemetry-and-privacy.md) and [privacy policy](https://api.physiology.presagetech.com/privacypolicy).
 
 **AI services**
-- None. SOVA does not use the SDK's optional `requestInsight` AI feature or any other AI service.
+- The only AI processing is Presage's automatic vitals insights described above, which run inside the SDK. SOVA makes no AI requests of its own (it does not call `requestInsight`) and uses no other AI service.
 
 **Not medical**
 - SOVA is a focus and self-reflection tool. It makes no diagnosis or treatment claims, shows no stress score, and is not for medical decisions. Presage states its SDK metrics are for general wellness only and are not FDA-cleared.

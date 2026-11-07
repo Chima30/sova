@@ -55,6 +55,8 @@ class NativeMeasurement {
       this.send({ kind: 'reading', reading: extractLatest(decoded) });
     });
     this.sdk.on('error', (code, message, retryable) => this.send({ kind: 'error', code, message, retryable: !!retryable }));
+    // Presage's automatic vitals insights (see README, Consent and data handling).
+    this.sdk.on('insight', (buf, requestId) => this.send({ kind: 'insight', requestId, bytes: buf ? buf.length : 0 }));
   }
 
   _useCamera() {

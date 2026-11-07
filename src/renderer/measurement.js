@@ -108,6 +108,7 @@ class NativeMeasurement extends BaseMeasurement {
     else if (ev.kind === 'validation') this._validation(ev.code);
     else if (ev.kind === 'reading') this._emit('reading', ev.reading, this.elapsed());
     else if (ev.kind === 'error') this._error(ev.code, ev.message, ev.retryable);
+    else if (ev.kind === 'insight') console.info('[SOVA] Presage AI vitals insight received', ev.requestId, `${ev.bytes} bytes`);
     else if (ev.kind === 'camera') console.info('[SOVA] camera (native)', JSON.stringify(ev));
   }
 

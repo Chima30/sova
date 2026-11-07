@@ -11,7 +11,7 @@ const { app, BrowserWindow } = require('electron');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sova-smoke-'));
 app.setPath('userData', tmp);
-fs.writeFileSync(path.join(tmp, 'sova-settings.json'), JSON.stringify({ consentVersion: 1, showWidget: true }));
+fs.writeFileSync(path.join(tmp, 'sova-settings.json'), JSON.stringify({ consentVersion: 2, showWidget: true }));
 const base = Date.parse('2026-11-06T09:00:00.000Z');
 const at = (s) => new Date(base + s * 1000).toISOString();
 fs.writeFileSync(path.join(tmp, 'sova-sessions.json'), JSON.stringify([{

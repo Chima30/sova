@@ -79,7 +79,8 @@ function showConsent() {
       <ul class="list card">
         <li><span class="dot" style="margin-top: 7px"></span><span>The camera is on only during a focus session or reset, with an indicator and a pause button.</span></li>
         <li><span class="dot" style="margin-top: 7px"></span><span>No video or photos are ever recorded or saved.</span></li>
-        <li><span class="dot" style="margin-top: 7px"></span><span>Signals are computed on this computer by the Presage SmartSpectra SDK. It connects to Presage only to start each session. <a href="${PRIVACY_POLICY}" target="_blank" rel="noreferrer">Presage privacy policy</a></span></li>
+        <li><span class="dot" style="margin-top: 7px"></span><span>Signals are computed on this computer by the Presage SmartSpectra SDK. It connects to Presage to start each session. <a href="${PRIVACY_POLICY}" target="_blank" rel="noreferrer">Presage privacy policy</a></span></li>
+        <li><span class="dot" style="margin-top: 7px"></span><span>During a session the SDK also sends your pulse, HRV and breathing values (never video) to Presage's AI service for automatic vitals check-ins, about once a minute. SOVA cannot switch this off.</span></li>
         <li><span class="dot" style="margin-top: 7px"></span><span>Presage's anonymous SDK diagnostics are off unless you turn them on in Settings. They never include video, your readings or anything that identifies you.</span></li>
         <li><span class="dot" style="margin-top: 7px"></span><span>Only session summaries, your baseline, reflections and notes are stored, on this computer. You can export or delete them at any time.</span></li>
       </ul>
