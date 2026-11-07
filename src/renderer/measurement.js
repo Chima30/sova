@@ -59,8 +59,10 @@ class Measurement {
       enableTelemetry: !!telemetry,   // Presage diagnostics are opt-in in SOVA
     });
 
+    const STATUS_NAME = Object.fromEntries(Object.entries(ProcessingStatus).map(([k, v]) => [v, k]));
     this.sdk.on('processingStatus', (status) => {
       this.status = status;
+      console.info('[SOVA] processing status', STATUS_NAME[status] || status);
       if (status === ProcessingStatus.kRunning && this.startedAt == null) this.startedAt = now();
       this._emit('status', status);
     });
@@ -79,6 +81,7 @@ class Measurement {
     });
 
     this.sdk.on('error', (code, message, retryable) => {
+      console.error('[SOVA] SDK error', code, message, 'retryable=', retryable);
       this._emit('error', { code, message, retryable, text: ERROR_TEXT[code] || message });
     });
 

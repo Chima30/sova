@@ -54,6 +54,8 @@ class LiveSession {
     this.awayFlag = false;
     this.cameraPaused = false;
     this.validation = null;
+    this.faceVisible = true;     // validation events arrive on change only
+    this.metricsCount = 0;
     this.ended = false;
     this.phaseUi = this.mode === 'live' ? 'check' : 'running';
 
@@ -106,7 +108,7 @@ class LiveSession {
 
   startFocus() {
     this.phaseUi = 'running';
-    this.baselineStart = this.measurement ? this.measurement.elapsed() : null;
+    this.baselineStart = null;   // set by the first steady breathing reading
     this.log('session-start', { mode: this.mode });
     this.render();
     announce('Focus session started');
@@ -130,7 +132,9 @@ class LiveSession {
 
   onValidation(v) {
     this.validation = v;
-    if (v.name !== 'kNoFaceFound') this.cue.faceSeen(now());
+    console.info('[SOVA] validation', v.name, '-', v.tip);
+    this.faceVisible = v.name !== 'kNoFaceFound';
+    if (this.faceVisible) this.cue.faceSeen(now());
     const tip = $('#quality-tip');
     if (tip) tip.textContent = v.tip;
     const dot = $('#quality-dot');
@@ -148,11 +152,22 @@ class LiveSession {
   onReading(r, elapsed) {
     const t = now();
     const cfg = this.config.signals;
+    this.metricsCount += 1;
+    if (this.metricsCount === 1 || this.metricsCount % 60 === 0) {
+      console.info('[SOVA] metrics update', this.metricsCount, {
+        breathing: r.breathing, pulse: r.pulse, hrv: r.hrv, elapsed: Math.round(elapsed),
+      });
+    }
     for (const kind of ['breathing', 'pulse', 'hrv']) {
       const check = checkUsable(kind, r[kind], elapsed, cfg);
       if (check.usable) {
         this.usable[kind] = { value: r[kind].value, t };
-        if (this.phaseUi === 'running') {
+        // The baseline window opens with the first steady breathing reading.
+        if (this.phaseUi === 'running' && kind === 'breathing' && this.baselineStart == null) {
+          this.baselineStart = elapsed;
+          this.log('baseline-start');
+        }
+        if (this.phaseUi === 'running' && this.baselineStart != null) {
           const be = elapsed - (this.baselineStart || 0);
           if (!this.baselineResult) this.baseline.add(kind, r[kind].value, be);
           else this.cue.addUsable(kind, r[kind].value, t);
@@ -185,10 +200,11 @@ class LiveSession {
     if (this.phaseUi !== 'running') return this.renderCheck();
 
     const live = this.mode === 'live' && this.measurement && !this.cameraPaused;
-    if (!live) this.cue.faceSeen(t);
+    // Face presence follows the latest validation state, not event timing.
+    if (!live || this.faceVisible) this.cue.faceSeen(t);
 
-    // Baseline: freeze after its window.
-    if (live && !this.baselineResult && this.measurement.elapsed() - this.baselineStart >= this.config.baseline.durationSeconds) {
+    // Baseline: freeze after its window, which starts at the first steady reading.
+    if (live && !this.baselineResult && this.baselineStart != null && this.measurement.elapsed() - this.baselineStart >= this.config.baseline.durationSeconds) {
       this.baseline.addBlinkWindow(this.blinkOnsets, this.config.baseline.durationSeconds);
       this.baselineResult = this.baseline.freeze();
       this.cue.setBaseline(this.baselineResult);
@@ -322,7 +338,7 @@ class LiveSession {
     this.baseline = new Baseline(this.config.baseline);
     this.baselineResult = null;
     this.blinkOnsets = 0;
-    this.baselineStart = this.measurement.elapsed();
+    this.baselineStart = null;
     this.cue.setBaseline(null);
     this.log('recalibrate');
     this.render();
@@ -423,7 +439,7 @@ class LiveSession {
             <canvas class="trace" id="s-trace" width="600" height="56" aria-label="Live breathing line"></canvas></div>
           <div class="card signal"><div class="signal-head"><span>Pulse</span><span id="s-pulse-note"></span></div><div id="s-pulse"></div></div>
           <div class="card signal"><div class="signal-head"><span>HRV (RMSSD)</span><span id="s-hrv-note"></span></div><div id="s-hrv"></div></div>
-          <div class="pill" style="align-self: flex-start"><span class="dot" id="quality-dot"></span><span id="quality-tip">${esc(this.validation ? this.validation.tip : 'Waiting for signal')}</span></div>
+          <div class="pill" style="align-self: flex-start"><span class="dot${this.validation && this.validation.ok ? '' : ' warn'}" id="quality-dot"></span><span id="quality-tip">${esc(this.validation ? this.validation.tip : 'Waiting for signal')}</span></div>
           <p class="small">Camera-based estimates for self-reflection, not medical readings. Values are hidden whenever the signal is not reliable.</p>` : `
           <div class="card small">Time-based eye-rest reminders still run. Breathing resets work as guided exercises without live feedback.</div>`}
           <p class="small" id="cue-state"></p>
@@ -469,8 +485,11 @@ class LiveSession {
 
     if (this.mode !== 'live') return;
     const bb = $('#baseline-banner');
-    if (!this.baselineResult) {
-      const p = this.baselineStart == null ? 0 : Math.min(1, (this.measurement ? this.measurement.elapsed() - this.baselineStart : 0) / this.config.baseline.durationSeconds);
+    if (!this.baselineResult && this.baselineStart == null) {
+      const tip = this.validation && !this.validation.ok ? ` ${this.validation.tip}` : '';
+      bb.innerHTML = `<div class="banner info" style="margin-bottom: 18px"><span>Waiting for a steady breathing signal before setting your baseline.${esc(tip)} Breathing needs about 30 seconds of steady signal.</span></div>`;
+    } else if (!this.baselineResult) {
+      const p = Math.min(1, (this.measurement ? this.measurement.elapsed() - this.baselineStart : 0) / this.config.baseline.durationSeconds);
       bb.innerHTML = `<div class="banner info" style="margin-bottom: 18px"><span>Setting your baseline. Sit naturally and avoid talking.</span><div class="progress" style="flex: 1; min-width: 160px"><div style="width: ${Math.round(p * 100)}%"></div></div></div>`;
     } else if (!this.baselineResult.reliable) {
       bb.innerHTML = `<div class="banner" style="margin-bottom: 18px"><span>SOVA couldn't set a reliable baseline, so tension cues are off. Check lighting and position, then recalibrate.</span><button class="btn" id="recal">Recalibrate</button></div>`;
