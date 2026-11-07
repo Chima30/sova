@@ -53,67 +53,83 @@ function noiseBuffer(a, kind) {
   return buf;
 }
 
+// Gains below were set by measuring each sound's output level (RMS) in
+// Chromium's audio engine: about -18 dBFS at full volume for every sound.
+const LEVEL = { rain: 0.97, forest: 0.63, noise: 0.63, ambient: 0.085 };
+
+// Build one ambient sound into `dest` on context `a`. Returns nodes to stop
+// and a function that schedules extra events (forest birds).
+function buildAmbient(a, dest, kind, keep) {
+  const loop = (type) => { const src = keep(a.createBufferSource()); src.buffer = noiseBuffer(a, type); src.loop = true; src.start(); return src; };
+  const lfo = (param, rate, depth, base) => {
+    param.value = base;
+    const o = keep(a.createOscillator()); const g = keep(a.createGain());
+    o.frequency.value = rate; g.gain.value = depth;
+    o.connect(g).connect(param); o.start();
+  };
+  const out = keep(a.createGain());
+  out.gain.value = LEVEL[kind] || 1;
+  out.connect(dest);
+
+  if (kind === 'rain') {
+    const src = loop('pink');
+    const hp = keep(a.createBiquadFilter()); hp.type = 'highpass'; hp.frequency.value = 400;
+    const lp = keep(a.createBiquadFilter()); lp.type = 'lowpass'; lp.frequency.value = 7000;
+    const g = keep(a.createGain());
+    lfo(g.gain, 0.08, 0.12, 0.85);
+    src.connect(hp).connect(lp).connect(g).connect(out);
+  } else if (kind === 'forest') {
+    const src = loop('brown');
+    const lp = keep(a.createBiquadFilter()); lp.type = 'lowpass';
+    lfo(lp.frequency, 0.05, 250, 700);
+    src.connect(lp).connect(out);
+  } else if (kind === 'noise') {
+    const src = loop('brown');
+    const lp = keep(a.createBiquadFilter()); lp.type = 'lowpass'; lp.frequency.value = 900;
+    src.connect(lp).connect(out);
+  } else {
+    const lp = keep(a.createBiquadFilter()); lp.type = 'lowpass';
+    lfo(lp.frequency, 0.03, 300, 700);
+    for (const f of [110, 110.6, 164.8, 220.4]) {
+      const o = keep(a.createOscillator()); o.type = 'sine'; o.frequency.value = f; o.connect(lp); o.start();
+    }
+    lp.connect(out);
+  }
+  return out;
+}
+
 const ambient = {
   nodes: [],
   timers: [],
   master: null,
   current: null,
 
-  start(kind, volume = 0.4) {
+  async start(kind, volume = 0.4) {
     this.stop();
     const a = ac();
-    if (a.state === 'suspended') a.resume();
+    if (a.state !== 'running') { try { await a.resume(); } catch { /* ignore */ } }
     const master = a.createGain();
     master.gain.setValueAtTime(0, a.currentTime);
-    master.gain.linearRampToValueAtTime(volume, a.currentTime + 2);
+    master.gain.linearRampToValueAtTime(volume, a.currentTime + 1.5);
     master.connect(a.destination);
     this.master = master;
     this.current = kind;
-    const keep = (n) => { this.nodes.push(n); return n; };
-    const loop = (type) => { const src = keep(a.createBufferSource()); src.buffer = noiseBuffer(a, type); src.loop = true; src.start(); return src; };
-    const lfo = (target, rate, depth, base) => {
-      const o = keep(a.createOscillator()); const g = keep(a.createGain());
-      o.frequency.value = rate; g.gain.value = depth; target.value = base;
-      o.connect(g).connect(target); o.start();
-    };
+    const out = buildAmbient(a, master, kind, (n) => { this.nodes.push(n); return n; });
+    console.info('[SOVA] ambient sound', kind, 'context', a.state, 'volume', volume);
 
-    if (kind === 'rain') {
-      const src = loop('pink');
-      const hp = keep(a.createBiquadFilter()); hp.type = 'highpass'; hp.frequency.value = 500;
-      const lp = keep(a.createBiquadFilter()); lp.type = 'lowpass'; lp.frequency.value = 7000;
-      const g = keep(a.createGain());
-      lfo(g.gain, 0.08, 0.08, 0.55);
-      src.connect(hp).connect(lp).connect(g).connect(master);
-    } else if (kind === 'forest') {
-      const src = loop('brown');
-      const lp = keep(a.createBiquadFilter()); lp.type = 'lowpass';
-      lfo(lp.frequency, 0.05, 250, 650);
-      const g = keep(a.createGain()); g.gain.value = 0.7;
-      src.connect(lp).connect(g).connect(master);
+    if (kind === 'forest') {
       const chirp = () => {
         if (this.master !== master) return;
         const o = a.createOscillator(); const cg = a.createGain();
         const f = 2400 + Math.random() * 1600; const t = a.currentTime;
         o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 1.25, t + 0.12);
-        cg.gain.setValueAtTime(0, t); cg.gain.linearRampToValueAtTime(0.025, t + 0.03); cg.gain.linearRampToValueAtTime(0, t + 0.16);
+        cg.gain.setValueAtTime(0, t); cg.gain.linearRampToValueAtTime(0.05, t + 0.03); cg.gain.linearRampToValueAtTime(0, t + 0.16);
         o.connect(cg).connect(master); o.start(t); o.stop(t + 0.2);
         this.timers.push(setTimeout(chirp, 3000 + Math.random() * 6000));
       };
       this.timers.push(setTimeout(chirp, 2500));
-    } else if (kind === 'noise') {
-      const src = loop('brown');
-      const lp = keep(a.createBiquadFilter()); lp.type = 'lowpass'; lp.frequency.value = 900;
-      src.connect(lp).connect(master);
-    } else {
-      // 'ambient': a soft, slowly shifting drone
-      const g = keep(a.createGain()); g.gain.value = 0.12;
-      const lp = keep(a.createBiquadFilter()); lp.type = 'lowpass';
-      lfo(lp.frequency, 0.03, 300, 700);
-      for (const f of [110, 110.6, 164.8, 220.4]) {
-        const o = keep(a.createOscillator()); o.type = 'sine'; o.frequency.value = f; o.connect(lp); o.start();
-      }
-      lp.connect(g).connect(master);
     }
+    return out;
   },
 
   setVolume(v) {
@@ -139,4 +155,4 @@ const ambient = {
   },
 };
 
-module.exports = { pace, chime, ambient };
+module.exports = { pace, chime, ambient, buildAmbient, noiseBuffer };

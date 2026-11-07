@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS = {
   showWidget: true,
   cueOverrides: {},            // personal sensitivity settings
   autoSound: false,            // play the preset's ambient sound at session start
-  soundVolume: 0.4,
+  soundVolume: 0.7,
   soundId: 'rain',
   captureMode: 'native',       // 'native' (main-process camera) or 'renderer'
   cameraId: null,              // null = system default camera
