@@ -95,14 +95,48 @@ class Measurement {
 
   elapsed() { return this.startedAt == null ? 0 : now() - this.startedAt; }
   get running() { return this.status === ProcessingStatus.kRunning; }
+  get lightMode() { return this.resolution === 'light'; }
 
-  async start() { await this.sdk.start(); }
+  // SOVA opens the camera itself (useMediaStream) so it can ask for a frame
+  // rate of 30 and drop to 640x480 when a webcam can't keep 25 fps at 720p.
+  async _acquire() {
+    const size = this.resolution === 'light' ? { width: 640, height: 480 } : { width: 1280, height: 720 };
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { width: { ideal: size.width }, height: { ideal: size.height }, frameRate: { ideal: 30 } },
+    });
+    const track = this.stream.getVideoTracks()[0];
+    if (track) console.info('[SOVA] camera', track.label, JSON.stringify(track.getSettings()));
+    this.sdk.useMediaStream(this.stream);
+    this._emit('stream', this.stream);
+  }
+
+  _release() {
+    if (this.stream) { for (const t of this.stream.getTracks()) t.stop(); }
+    this.stream = null;
+  }
+
+  async start() {
+    if (!this.resolution) this.resolution = 'standard';
+    await this._acquire();
+    await this.sdk.start();
+  }
 
   async stop() {
     try { await this.sdk.stop(); } catch { /* already stopped */ }
+    this._release();
+  }
+
+  // Restart the pipeline, optionally in the lighter camera mode.
+  async restart(light) {
+    await this.stop();
+    if (this.status === ProcessingStatus.kError) { try { await this.sdk.reset(); } catch { /* ignore */ } }
+    if (light) this.resolution = 'light';
+    await this.start();
   }
 
   destroy() {
+    this._release();
     try { this.sdk.destroy(); } catch { /* already destroyed */ }
   }
 }

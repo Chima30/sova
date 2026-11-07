@@ -135,6 +135,17 @@ class LiveSession {
     console.info('[SOVA] validation', v.name, '-', v.tip);
     this.faceVisible = v.name !== 'kNoFaceFound';
     if (this.faceVisible) this.cue.faceSeen(now());
+    // Low frame rate for 8 s: switch the camera to 640x480 once.
+    if (v.name === 'kFrameRateTooLow') {
+      if (this.slowSince == null) this.slowSince = now();
+      clearTimeout(this.slowTimer);
+      this.slowTimer = setTimeout(() => {
+        if (this.validation && this.validation.name === 'kFrameRateTooLow') this.switchToLightCamera();
+      }, 8000);
+    } else {
+      this.slowSince = null;
+      clearTimeout(this.slowTimer);
+    }
     const tip = $('#quality-tip');
     if (tip) tip.textContent = v.tip;
     const dot = $('#quality-dot');
@@ -146,7 +157,31 @@ class LiveSession {
   onError(e) {
     if (e.code === 5) return this.fallbackToTimer(e.text);
     if (e.code === 2 || e.code === 4 || e.code === 7) return this.fallbackToTimer(e.text);
+    // Processing failed: restart once in the lighter camera mode, then fall back.
+    if (e.code === 8 && this.measurement && !this.processingRetried) {
+      this.processingRetried = true;
+      return this.switchToLightCamera(true);
+    }
+    if (e.code === 8) return this.fallbackToTimer('Live processing kept failing on this camera. The timer keeps running.');
     toast({ title: 'Live readings hit a problem', body: e.text, actions: [{ label: 'OK' }] });
+  }
+
+  async switchToLightCamera(afterError) {
+    if (!this.measurement || this.switchingCamera) return;
+    if (this.measurement.lightMode && !afterError) return;
+    this.switchingCamera = true;
+    this.log('camera-light-mode', { afterError: !!afterError });
+    toast({
+      title: 'Switched to a lighter camera mode',
+      body: 'Your webcam could not keep up at full resolution. More light in front of you also helps the frame rate.',
+      actions: [{ label: 'OK' }],
+    });
+    try {
+      await this.measurement.restart(true);
+    } catch (err) {
+      this.fallbackToTimer("Couldn't restart the camera.");
+    }
+    this.switchingCamera = false;
   }
 
   onReading(r, elapsed) {
@@ -348,6 +383,7 @@ class LiveSession {
     if (this.ended) return;
     this.ended = true;
     clearInterval(this.timer);
+    clearTimeout(this.slowTimer);
     window.removeEventListener('offline', this.onOffline);
     if (this.measurement) { await this.measurement.stop(); this.measurement.destroy(); }
     this.log('session-end', { completed });
