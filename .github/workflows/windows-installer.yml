@@ -1,15 +1,19 @@
 name: Windows installer
 
-# Builds SOVA-Setup.exe on a Windows machine on every push to main.
-# - The installer is always uploaded as a workflow artifact.
-# - If package.json has a version with no release yet (for example 0.3.0 and
-#   no v0.3.0 release), a GitHub Release is published with the installer.
+# Builds SOVA-Setup.exe on a Windows machine on every push to main and
+# uploads it as a workflow artifact only. Nothing is published automatically.
+# To publish a GitHub Release, run this workflow by hand (Actions tab, Run
+# workflow) with "publish" ticked, once John has approved the version.
 
 on:
   push:
     branches: [main]
-    tags: ['v*']
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish a GitHub Release for the version in package.json'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -47,8 +51,8 @@ jobs:
           path: release/SOVA-Setup-*.exe
           if-no-files-found: error
 
-      - name: Publish release for a new version
-        if: github.ref == 'refs/heads/main'
+      - name: Publish release (manual runs only, when approved)
+        if: github.event_name == 'workflow_dispatch' && inputs.publish
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
