@@ -17,6 +17,8 @@ const DEFAULT_SETTINGS = {
   breathingPatternId: 'calm-6',
   customPattern: { inhale: 4, hold: 0, exhale: 6, holdAfterExhale: 0 },
   theme: 'dark',
+  captureMode: 'native',       // 'native' (main-process camera) or 'renderer'
+  cameraId: null,              // null = system default camera
   encryptedApiKey: null,       // OS-encrypted via Electron safeStorage
 };
 
@@ -24,6 +26,7 @@ const DEFAULT_SETTINGS = {
 const WRITABLE = new Set([
   'consentVersion', 'telemetry', 'presetId', 'sensitivity', 'quietHours',
   'reducedMotion', 'soundGuide', 'breathingPatternId', 'customPattern', 'theme',
+  'captureMode', 'cameraId',
 ]);
 
 class Store {

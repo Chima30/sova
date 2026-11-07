@@ -24,6 +24,18 @@ contextBridge.exposeInMainWorld('sova', {
   deleteAll: invoke('sova:data:delete-all'),
   idleSeconds: invoke('sova:system:idle'),
   appInfo: invoke('sova:app:info'),
+  native: {
+    start: invoke('sova:native:start'),
+    stop: invoke('sova:native:stop'),
+    restart: invoke('sova:native:restart'),
+    destroy: invoke('sova:native:destroy'),
+    cameras: invoke('sova:native:cameras'),
+    onEvent: (fn) => {
+      const listener = (_e, ev) => fn(ev);
+      ipcRenderer.on('sova:native:event', listener);
+      return () => ipcRenderer.removeListener('sova:native:event', listener);
+    },
+  },
   onQuickReset: (fn) => {
     const listener = () => fn();
     ipcRenderer.on('sova:shortcut:quick-reset', listener);

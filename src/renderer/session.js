@@ -5,7 +5,7 @@
 // Without a key or a connection it runs as a plain timer and says so.
 
 const { $, esc, toast, announce } = require('./dom');
-const { Measurement, now } = require('./measurement');
+const { createMeasurement, now } = require('./measurement');
 const { checkUsable, HIDDEN_REASON_TEXT } = require('../../shared/core/signals');
 const { Baseline } = require('../../shared/core/baseline');
 const { CueEngine, inQuietHours } = require('../../shared/core/cueEngine');
@@ -59,9 +59,11 @@ class LiveSession {
     this.ended = false;
     this.phaseUi = this.mode === 'live' ? 'check' : 'running';
 
-    this.measurement = this.mode === 'live' ? new Measurement({
+    this.measurement = this.mode === 'live' ? createMeasurement({
       apiKey,
       telemetry: settings.telemetry,
+      cameraId: settings.cameraId,
+      captureMode: settings.captureMode || 'native',
       handlers: {
         stream: (s) => { const v = $('#preview'); if (v) { v.srcObject = s; v.play().catch(() => {}); } },
         validation: (v) => this.onValidation(v),
@@ -157,29 +159,35 @@ class LiveSession {
   onError(e) {
     if (e.code === 5) return this.fallbackToTimer(e.text);
     if (e.code === 2 || e.code === 4 || e.code === 7) return this.fallbackToTimer(e.text);
-    // Processing failed: restart once in the lighter camera mode, then fall back.
-    if (e.code === 8 && this.measurement && !this.processingRetried) {
-      this.processingRetried = true;
-      return this.switchToLightCamera(true);
+    // Retryable errors (the SDK says so): restart up to 3 times, the second
+    // time in the lighter camera mode, then fall back to the plain timer.
+    if (e.retryable && this.measurement) {
+      this.restarts = (this.restarts || 0) + 1;
+      this.log('sdk-restart', { code: e.code, attempt: this.restarts });
+      if (this.restarts > 3) return this.fallbackToTimer('Live processing kept stopping on this computer. The timer keeps running.');
+      return setTimeout(() => this.switchToLightCamera(this.restarts >= 2, true), 2000);
     }
-    if (e.code === 8) return this.fallbackToTimer('Live processing kept failing on this camera. The timer keeps running.');
     toast({ title: 'Live readings hit a problem', body: e.text, actions: [{ label: 'OK' }] });
   }
 
-  async switchToLightCamera(afterError) {
-    if (!this.measurement || this.switchingCamera) return;
-    if (this.measurement.lightMode && !afterError) return;
+  // Restart the SDK, optionally in the 640x480 camera mode.
+  async switchToLightCamera(light = true, afterError = false) {
+    if (!this.measurement || this.switchingCamera || this.ended) return;
+    const goLight = light && !this.measurement.lightMode;
+    if (!goLight && !afterError) return;
     this.switchingCamera = true;
-    this.log('camera-light-mode', { afterError: !!afterError });
-    toast({
-      title: 'Switched to a lighter camera mode',
-      body: 'Your webcam could not keep up at full resolution. More light in front of you also helps the frame rate.',
-      actions: [{ label: 'OK' }],
-    });
+    if (goLight) {
+      this.log('camera-light-mode', { afterError });
+      toast({
+        title: 'Switched to a lighter camera mode',
+        body: 'Your webcam could not keep up at full resolution. More light in front of you also helps the frame rate.',
+        actions: [{ label: 'OK' }],
+      });
+    }
     try {
-      await this.measurement.restart(true);
+      await this.measurement.restart(goLight);
     } catch (err) {
-      this.fallbackToTimer("Couldn't restart the camera.");
+      this.fallbackToTimer(`Couldn't restart live readings: ${err.message}`);
     }
     this.switchingCamera = false;
   }
@@ -417,7 +425,9 @@ class LiveSession {
       <h1>Signal check</h1>
       <p class="lead">Before ${esc(this.preset.name)} starts: device on a steady surface, even light on your face, no bright window behind you, face and chest in view. Stay still and avoid talking while SOVA reads your baseline.</p>
       <div class="card stack" style="align-items: center">
-        <video id="preview" class="preview" autoplay playsinline muted aria-label="Camera preview, shown only during the signal check"></video>
+        ${this.measurement && this.measurement.native
+          ? '<div class="preview" style="display: flex; align-items: center; justify-content: center; transform: none; color: var(--muted); text-align: center; padding: 20px">The camera is on. SOVA reads it directly for a steadier frame rate, so there is no preview. Follow the tip below.</div>'
+          : '<video id="preview" class="preview" autoplay playsinline muted aria-label="Camera preview, shown only during the signal check"></video>'}
         <div class="row"><span class="dot warn" id="quality-dot"></span><span id="quality-tip">Starting the camera</span></div>
         <div class="row">
           <button class="btn primary big" id="check-start" disabled>Start ${esc(this.preset.name)}</button>

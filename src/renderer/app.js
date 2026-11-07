@@ -350,6 +350,7 @@ const VIEWS = {
   async settings() {
     const s = state.settings;
     const sum = await window.sova.dataSummary();
+    const cameras = await window.sova.native.cameras().catch(() => []);
     $('#view').innerHTML = `
       <h1>Settings</h1>
       <div class="stack" style="max-width: 720px">
@@ -359,6 +360,19 @@ const VIEWS = {
           <p class="small">Get a free key from the <a href="${KEY_PORTAL}" target="_blank" rel="noreferrer">Presage developer portal</a>. It is encrypted with your operating system's secure storage and never leaves this computer except to sign in to Presage.</p>
           <div class="row"><input type="password" id="key" placeholder="${s.hasApiKey ? 'Key saved. Paste a new one to replace it.' : 'Paste your API key'}" style="flex: 1; min-width: 240px" aria-label="Presage API key">
             <button class="btn primary" id="key-save">Save key</button>${s.hasApiKey ? '<button class="btn" id="key-clear">Remove key</button>' : ''}</div>`}
+        </section>
+
+        <section class="card stack">
+          <h2 style="margin: 0">Camera</h2>
+          <label class="field">Camera
+            <select id="cam"><option value="">System default</option>
+              ${cameras.map((c) => `<option value="${esc(c.id)}" ${s.cameraId === c.id ? 'selected' : ''}>${esc(c.name || c.id)}</option>`).join('')}</select></label>
+          <label class="field">Capture mode
+            <select id="capture">
+              <option value="native" ${s.captureMode !== 'renderer' ? 'selected' : ''}>Direct (recommended, steadier frame rate)</option>
+              <option value="renderer" ${s.captureMode === 'renderer' ? 'selected' : ''}>Through the window (shows a preview)</option>
+            </select></label>
+          <p class="small" style="margin: 0">If the signal check keeps saying the camera is too slow, add light in front of you and keep Direct mode.</p>
         </section>
 
         <section class="card stack">
@@ -404,6 +418,8 @@ const VIEWS = {
     const keyClear = $('#key-clear');
     if (keyClear) keyClear.addEventListener('click', async () => { await window.sova.clearApiKey(); state.settings = await window.sova.getSettings(); VIEWS.settings(); });
 
+    $('#cam').addEventListener('change', (e) => saveSettings({ cameraId: e.target.value || null }));
+    $('#capture').addEventListener('change', (e) => saveSettings({ captureMode: e.target.value }));
     $('#sens').addEventListener('change', (e) => saveSettings({ sensitivity: e.target.value || null }));
     const qh = () => saveSettings({ quietHours: { enabled: $('#qh-on').checked, start: $('#qh-start').value || '21:00', end: $('#qh-end').value || '08:00' } });
     ['#qh-on', '#qh-start', '#qh-end'].forEach((id) => $(id).addEventListener('change', qh));

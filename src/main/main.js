@@ -26,6 +26,7 @@ if (app.isPackaged) {
 
 const { bindSmartSpectraIpc } = require('@smartspectra/node-sdk/main');
 const { Store, publicSettings } = require('./store');
+const { NativeMeasurement } = require('./nativeMeasurement');
 const config = require('../../shared/config/sova-config.json');
 const { toCSV, toJSON } = require('../../shared/core/exporter');
 
@@ -33,6 +34,7 @@ app.setName('SOVA');
 
 let win = null;
 let store = null;
+let native = null;
 const RENDERER_INDEX = path.join(__dirname, '..', 'renderer', 'index.html');
 
 function isOwnPage(url) {
@@ -57,6 +59,8 @@ function createWindow() {
   });
 
   bindSmartSpectraIpc(win);
+  native = new NativeMeasurement(win.webContents);
+  win.on('closed', () => { if (native) native.destroy(); native = null; win = null; });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     // External links (privacy policy, docs) open in the user's browser.
@@ -138,6 +142,23 @@ function registerIpc() {
   handle('sova:system:idle', () => powerMonitor.getSystemIdleTime());
 
   handle('sova:app:info', () => ({ version: app.getVersion(), platform: process.platform }));
+
+  // Main-process measurement (native camera capture). The API key stays in
+  // the main process; errors come back as plain objects.
+  const safe = async (fn) => {
+    try { return await fn(); } catch (e) {
+      return { ok: false, code: e && e.code, message: (e && e.message) || String(e), retryable: !!(e && e.retryable) };
+    }
+  };
+  handle('sova:native:start', (opts) => safe(() => {
+    const apiKey = readApiKey();
+    if (!apiKey) return { ok: false, code: 2, message: 'No API key' };
+    return native.start({ apiKey, telemetry: !!(opts && opts.telemetry), size: opts && opts.size, cameraId: opts && opts.cameraId });
+  }));
+  handle('sova:native:stop', () => safe(() => native.stop()));
+  handle('sova:native:restart', (size) => safe(() => native.restart(size)));
+  handle('sova:native:destroy', () => safe(() => native.destroy()));
+  handle('sova:native:cameras', () => NativeMeasurement.cameras());
 }
 
 app.whenReady().then(() => {
