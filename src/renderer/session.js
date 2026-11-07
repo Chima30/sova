@@ -502,8 +502,11 @@ class LiveSession {
     const b = this.baselineResult;
     const pick = (k) => (b && b[k] && b[k].reliable ? b[k].value : null);
     const lastSound = [...this.events].reverse().find((e) => e.type === 'reset' && e.breathSound && e.breathSound.enough);
+    const lastPair = [...this.events].reverse().find((e) => e.type === 'reset' && e.before && e.after && e.before.breathing != null && e.after.breathing != null);
     return {
       presetName: this.preset.name,
+      feeling: this.checkIn ? this.checkIn.feeling : null,
+      lastReset: lastPair ? { before: lastPair.before.breathing, after: lastPair.after.breathing } : null,
       focusMinutes: this.engine.completedFocusSeconds / 60,
       baseline: b ? { breathing: pick('breathing'), pulse: pick('pulse'), hrv: pick('hrv') } : null,
       tensionCues: count('cue-tension'),

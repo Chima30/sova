@@ -1202,7 +1202,7 @@ const VIEWS = {
       e.target.checked = false;
       toast({
         title: 'Turn on AI reflections?',
-        body: "When you press AI check-in, and at the end of a session, SOVA sends a short prompt with your session summary (preset, focus minutes, counts of cues, resets and eye rests, your baseline and breath-sound results) to Presage, together with the pulse, HRV and breathing values the SDK has buffered. Presage forwards it to a large language model. Never video. The reply is saved with the session on this computer. AI can be wrong and is not medical advice.",
+        body: "When you press AI check-in, and at the end of a session, SOVA sends a short prompt with your session summary (preset, focus minutes, counts of cues, resets and eye rests, your baseline, breathing around your last reset, breath-sound results and the feeling you chose on Home) to Presage, together with the pulse, HRV and breathing values the SDK has buffered. Presage forwards it to a large language model. Never video. The reply is saved with the session on this computer. AI can be wrong and is not medical advice.",
         actions: [
           { label: 'Turn on', primary: true, onClick: async () => { await saveSettings({ aiReflections: true }); VIEWS.settings(); } },
           { label: 'Cancel' },

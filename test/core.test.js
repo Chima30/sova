@@ -216,11 +216,16 @@ test('AI prompts stay under 2048 bytes and keep the safety rules', () => {
     presetName: 'Studying', focusMinutes: 48, tensionCues: 2, resets: 1, eyeRests: 3,
     baseline: { breathing: 13.2, pulse: 70.4, hrv: null },
     breathSound: { avgExhale: 5.2, targetExhale: 6 },
+    feeling: 'Tense', lastReset: { before: 17.4, after: 13.1 },
   });
+  assert.match(p, /I said I felt: tense/);
+  assert.match(p, /17 breaths\/min before, 13 a minute after/);
+  assert.match(p, /never interpret it/);
   assert.ok(Buffer.byteLength(p, 'utf8') <= MAX_BYTES);
   assert.match(p, /do not diagnose/);
   assert.match(p, /13 breaths\/min, 70 bpm/);
   assert.doesNotMatch(p, /ms HRV/, 'missing values are left out, not invented');
+  assert.doesNotMatch(buildPrompt('checkin', { presetName: 'x' }), /I said I felt/, 'no check-in, no feeling line');
   const long = buildPrompt('checkin', { presetName: 'x'.repeat(3000) });
   assert.ok(Buffer.byteLength(long, 'utf8') <= MAX_BYTES);
 });

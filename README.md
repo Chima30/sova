@@ -186,7 +186,7 @@ SOVA calls the SDK's `requestInsight` only when the user has turned on AI reflec
 
 **AI services**
 - Presage's automatic vitals insights described above run inside the SDK; SOVA does not show them.
-- **AI reflections (optional, off by default):** after a separate consent prompt, SOVA calls the SDK's `requestInsight` when the user presses AI check-in and at the end of a session of 2 minutes or more. The prompt contains the session summary (preset, focus minutes, counts of cues, resets and eye rests, baseline values, last breath-sound result) and is sent to Presage with the SDK's buffered pulse, HRV and breathing values; Presage forwards it to a large language model. No video, images or microphone audio are included. The reply is stored with the session on the user's computer and included in export and deletion. Replies are labelled as AI-generated and may be inaccurate.
+- **AI reflections (optional, off by default):** after a separate consent prompt, SOVA calls the SDK's `requestInsight` when the user presses AI check-in and at the end of a session of 2 minutes or more. The prompt contains the session summary (preset, focus minutes, counts of cues, resets and eye rests, baseline values, breathing before and after the last reset, last breath-sound result, and the feeling the user chose on Home, if any) and is sent to Presage with the SDK's buffered pulse, HRV and breathing values; Presage forwards it to a large language model. No video, images or microphone audio are included. The reply is stored with the session on the user's computer and included in export and deletion. Replies are labelled as AI-generated and may be inaccurate.
 - No other AI service is used.
 
 **Not medical**

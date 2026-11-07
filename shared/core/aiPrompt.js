@@ -4,13 +4,15 @@
 // the SDK's buffered pulse, HRV and breathing values to a language model.
 // Following Presage's prompt guidance, SOVA asks only about those three
 // signals, adds its own session context, and forbids medical or emotional
-// claims. Prompts must stay under 2048 bytes.
+// claims. The feeling you chose on Home is passed as your own words only.
+// Prompts must stay under 2048 bytes.
 
 const MAX_BYTES = 2048;
 
 const RULES = 'Rules: plain, calm, encouraging language; at most 3 short sentences; '
   + 'only talk about the measured pulse, HRV and breathing rate and the context given; '
   + 'compare with the personal baseline when it is given; '
+  + 'if I said how I felt before starting, you may mention it in my own word and relate it to the measured signals, but never interpret it or name any other feeling; '
   + 'do not diagnose, name any medical condition, mention stress, anxiety or emotions, or give medical advice; '
   + 'end with one gentle focus or recovery habit, such as a breathing reset, a longer exhale or a short break.';
 
@@ -19,6 +21,7 @@ function fmt(v, unit) { return v == null ? null : `${Math.round(v)} ${unit}`; }
 function contextLines(ctx) {
   const lines = [];
   if (ctx.presetName) lines.push(`Session type: ${ctx.presetName}.`);
+  if (ctx.feeling) lines.push(`Before starting I said I felt: ${String(ctx.feeling).toLowerCase()}.`);
   if (ctx.focusMinutes != null) lines.push(`Focused so far: ${Math.round(ctx.focusMinutes)} minutes.`);
   if (ctx.baseline) {
     const b = [fmt(ctx.baseline.breathing, 'breaths/min'), fmt(ctx.baseline.pulse, 'bpm'), fmt(ctx.baseline.hrv, 'ms HRV')].filter(Boolean);
@@ -29,6 +32,9 @@ function contextLines(ctx) {
   if (ctx.resets != null) counts.push(`${ctx.resets} breathing resets`);
   if (ctx.eyeRests != null) counts.push(`${ctx.eyeRests} eye rests`);
   if (counts.length) lines.push(`So far: ${counts.join(', ')}.`);
+  if (ctx.lastReset && ctx.lastReset.before != null && ctx.lastReset.after != null) {
+    lines.push(`Breathing around the last reset: ${Math.round(ctx.lastReset.before)} breaths/min before, ${Math.round(ctx.lastReset.after)} a minute after.`);
+  }
   if (ctx.breathSound && ctx.breathSound.avgExhale != null) {
     lines.push(`In the last reset, exhales heard by the microphone averaged ${ctx.breathSound.avgExhale} s against a ${ctx.breathSound.targetExhale} s target.`);
   }
