@@ -82,17 +82,11 @@ class NativeMeasurement {
     return { ok: true };
   }
 
-  // Stop, rebuild after an error, and start again (optionally lighter).
+  // Restart with a completely fresh SDK (optionally in the lighter mode).
   async restart(size) {
-    if (!this.sdk) return { ok: false };
-    await this.stop();
-    if (this.status === ProcessingStatus.kError) {
-      try { this.sdk.reset(); } catch { /* rebuild below */ }
-    }
+    if (!this.opts) return { ok: false };
     if (size) this.size = size;
-    this._useCamera();
-    this.sdk.start();
-    return { ok: true };
+    return this.start({ ...this.opts, size: this.size });
   }
 
   async destroy() {

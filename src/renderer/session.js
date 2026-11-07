@@ -224,6 +224,8 @@ class LiveSession {
       });
     }
     try {
+      // A restart interrupts the readings: an unfinished baseline starts over.
+      if (!this.baselineResult) this.resetBaselineWindow();
       await this.measurement.restart(goLight);
     } catch (err) {
       this.fallbackToTimer(`Couldn't restart live readings: ${err.message}`);
@@ -244,8 +246,8 @@ class LiveSession {
       const check = checkUsable(kind, r[kind], elapsed, cfg);
       if (check.usable) {
         this.usable[kind] = { value: r[kind].value, t };
-        // The baseline window opens with the first steady breathing reading.
-        if (this.phaseUi === 'running' && kind === 'breathing' && this.baselineStart == null) {
+        // The baseline window opens with the first steady breathing or pulse reading.
+        if (this.phaseUi === 'running' && (kind === 'breathing' || kind === 'pulse') && this.baselineStart == null) {
           this.baselineStart = elapsed;
           this.log('baseline-start');
         }
@@ -415,13 +417,17 @@ class LiveSession {
     this.render();
   }
 
-  recalibrate() {
-    if (!this.measurement) return;
+  resetBaselineWindow() {
     this.baseline = new Baseline(this.config.baseline);
     this.baselineResult = null;
     this.blinkOnsets = 0;
     this.baselineStart = null;
     this.cue.setBaseline(null);
+  }
+
+  recalibrate() {
+    if (!this.measurement) return;
+    this.resetBaselineWindow();
     this.log('recalibrate');
     this.render();
   }
@@ -572,7 +578,7 @@ class LiveSession {
     const bb = $('#baseline-banner');
     if (!this.baselineResult && this.baselineStart == null) {
       const tip = this.validation && !this.validation.ok ? ` ${this.validation.tip}` : '';
-      bb.innerHTML = `<div class="banner info" style="margin-bottom: 18px"><span>Waiting for a steady breathing signal before setting your baseline.${esc(tip)} Breathing needs about 30 seconds of steady signal.</span></div>`;
+      bb.innerHTML = `<div class="banner info" style="margin-bottom: 18px"><span>Waiting for a steady signal before setting your baseline.${esc(tip)} Pulse needs about 12 seconds, breathing about 30, with your chest in view.</span></div>`;
     } else if (!this.baselineResult) {
       const p = Math.min(1, (this.measurement ? this.measurement.elapsed() - this.baselineStart : 0) / this.config.baseline.durationSeconds);
       bb.innerHTML = `<div class="banner info" style="margin-bottom: 18px"><span>Setting your baseline. Sit naturally and avoid talking.</span><div class="progress" style="flex: 1; min-width: 160px"><div style="width: ${Math.round(p * 100)}%"></div></div></div>`;

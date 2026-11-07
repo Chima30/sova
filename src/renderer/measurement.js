@@ -130,6 +130,7 @@ class NativeMeasurement extends BaseMeasurement {
 
   async restart(light) {
     if (light) this.resolution = 'light';
+    this.startedAt = null;   // warm-up windows start again after a restart
     await this._call(window.sova.native.restart(this.resolution));
   }
 
@@ -185,6 +186,7 @@ class RendererMeasurement extends BaseMeasurement {
   }
 
   async restart(light) {
+    this.startedAt = null;
     await this.stop();
     if (this.status === ProcessingStatus.kError) { try { await this.sdk.reset(); } catch { /* ignore */ } }
     if (light) this.resolution = 'light';

@@ -172,3 +172,13 @@ test('skipped focus blocks do not count as finished', () => {
   s.tick(preset.focusMinutes * 60); // block 2 runs to the end
   assert.equal(s.finishedBlocks, 1);
 });
+
+test('baseline is reliable from pulse alone when breathing is too weak', () => {
+  const b = new Baseline(config.baseline);
+  for (let i = 0; i < 30; i++) b.add('pulse', 74 + (i % 3), i);
+  for (let i = 0; i < 3; i++) b.add('breathing', 12, i);
+  const f = b.freeze();
+  assert.equal(f.reliable, true);
+  assert.equal(f.breathing.reliable, false);
+  assert.equal(f.pulse.reliable, true);
+});

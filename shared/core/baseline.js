@@ -52,9 +52,9 @@ class Baseline {
     out.blinksPerMinute = this.blinkSeconds >= 60
       ? (this.blinkEvents / this.blinkSeconds) * 60
       : null;
-    // The session baseline is reliable when breathing is reliable: it is the
-    // signal every tension cue needs. Pulse and HRV add to it when present.
-    out.reliable = out.breathing.reliable;
+    // Reliable when at least one cue signal (breathing or pulse) is reliable.
+    // Each cue still checks its own signal's reliability before using it.
+    out.reliable = out.breathing.reliable || out.pulse.reliable;
     this.frozen = out;
     return out;
   }
