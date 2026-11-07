@@ -77,6 +77,17 @@ SOVA uses the Presage SmartSpectra SDK (`@smartspectra/node-sdk` 3.4.0) for ever
 
 Planned next: Android app with the same shared rules and config.
 
+## Install on Windows (no setup needed)
+
+1. Download **SOVA-Setup.exe** from the [latest release](https://github.com/Chima30/sova/releases/latest).
+2. Run it. Windows SmartScreen may warn because the installer is not code-signed yet: click **More info**, then **Run anyway**.
+3. Open SOVA, accept the camera consent, and paste your free [Presage API key](https://physiology.presagetech.com/auth/register) in **Settings**.
+4. Make sure Windows lets desktop apps use the camera: Settings › Privacy & security › Camera › **Let desktop apps access your camera**.
+
+Every push to `main` also builds the installer automatically with GitHub Actions ([workflow](.github/workflows/windows-installer.yml)).
+
+## Run from source
+
 ## Requirements
 
 - Node.js 20 or later (24 LTS recommended)
@@ -120,7 +131,7 @@ No SOVA login is required. Live readings need your own free Presage API key (ste
 ## Build installers
 
 ```bash
-npm run dist:win     # Windows NSIS installer
+npm run dist:win     # Windows installer in release/ (also built by GitHub Actions)
 npm run dist:mac     # macOS (Apple Silicon)
 npm run dist:linux   # Linux AppImage
 ```

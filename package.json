@@ -1,7 +1,7 @@
 {
   "name": "sova",
   "productName": "SOVA",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "SOVA: a personal focus and recovery workstation. Stay in focus. Stay in tune.",
   "author": "John Madubuike Chimaobi <johnchimz15@gmail.com>",
   "private": true,
@@ -13,7 +13,7 @@
     "start": "npm run build && electron .",
     "test": "node --test test/*.test.js",
     "smoke": "npm run build && electron test/smoke/electron-smoke.js",
-    "dist:win": "npm run build && electron-builder --win --x64",
+    "dist:win": "npm run build && electron-builder --win --x64 --publish never",
     "dist:mac": "npm run build && electron-builder --mac --arm64",
     "dist:linux": "npm run build && electron-builder --linux --x64"
   },
@@ -61,19 +61,37 @@
           "from": "node_modules/@smartspectra/node-sdk-darwin-${arch}/",
           "to": "smartspectra"
         }
-      ]
+      ],
+      "icon": "build/icon.png"
     },
     "win": {
-      "target": "nsis",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "extraResources": [
         {
           "from": "node_modules/@smartspectra/node-sdk-win32-${arch}/",
           "to": "smartspectra"
         }
-      ]
+      ],
+      "icon": "build/icon.ico"
     },
     "nsis": {
-      "artifactName": "SOVA-Setup-${version}.${ext}"
+      "artifactName": "SOVA-Setup-${version}.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SOVA",
+      "uninstallDisplayName": "SOVA",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
     },
     "linux": {
       "target": "AppImage",
@@ -83,8 +101,15 @@
           "from": "node_modules/@smartspectra/node-sdk-linux-${arch}/",
           "to": "smartspectra"
         }
-      ]
+      ],
+      "icon": "build/icon.png"
     },
-    "asar": true
+    "asar": true,
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "npmRebuild": false,
+    "publish": null
   }
 }
