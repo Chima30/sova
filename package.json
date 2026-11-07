@@ -18,7 +18,8 @@
     "dist:linux": "npm run build && electron-builder --linux --x64"
   },
   "dependencies": {
-    "@smartspectra/node-sdk": "3.4.0"
+    "@smartspectra/node-sdk": "3.4.0",
+    "protobufjs": "^7.6.6"
   },
   "devDependencies": {
     "electron": "^43.2.0",
@@ -56,13 +57,19 @@
         "NSCameraUsageDescription": "SOVA uses the camera during focus sessions to estimate breathing, pulse and HRV on this device. No video is saved."
       },
       "extraResources": [
-        { "from": "node_modules/@smartspectra/node-sdk-darwin-${arch}/", "to": "smartspectra" }
+        {
+          "from": "node_modules/@smartspectra/node-sdk-darwin-${arch}/",
+          "to": "smartspectra"
+        }
       ]
     },
     "win": {
       "target": "nsis",
       "extraResources": [
-        { "from": "node_modules/@smartspectra/node-sdk-win32-${arch}/", "to": "smartspectra" }
+        {
+          "from": "node_modules/@smartspectra/node-sdk-win32-${arch}/",
+          "to": "smartspectra"
+        }
       ]
     },
     "nsis": {
@@ -72,7 +79,10 @@
       "target": "AppImage",
       "category": "Utility",
       "extraResources": [
-        { "from": "node_modules/@smartspectra/node-sdk-linux-${arch}/", "to": "smartspectra" }
+        {
+          "from": "node_modules/@smartspectra/node-sdk-linux-${arch}/",
+          "to": "smartspectra"
+        }
       ]
     },
     "asar": true

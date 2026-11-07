@@ -82,6 +82,7 @@ function showConsent() {
         <li><span class="dot" style="margin-top: 7px"></span><span>Signals are computed on this computer by the Presage SmartSpectra SDK. It connects to Presage to start each session. <a href="${PRIVACY_POLICY}" target="_blank" rel="noreferrer">Presage privacy policy</a></span></li>
         <li><span class="dot" style="margin-top: 7px"></span><span>During a session the SDK also sends your pulse, HRV and breathing values (never video) to Presage's AI service for automatic vitals check-ins, about once a minute. SOVA cannot switch this off.</span></li>
         <li><span class="dot" style="margin-top: 7px"></span><span>Presage's anonymous SDK diagnostics are off unless you turn them on in Settings. They never include video, your readings or anything that identifies you.</span></li>
+        <li><span class="dot" style="margin-top: 7px"></span><span>Optional and off until you turn them on, each with its own consent: breath sound analysis with the microphone (never recorded), and AI reflections from Presage.</span></li>
         <li><span class="dot" style="margin-top: 7px"></span><span>Only session summaries, your baseline, reflections and notes are stored, on this computer. You can export or delete them at any time.</span></li>
       </ul>
       <p class="small">SOVA is a focus and self-reflection tool. It is not a medical device and is not for diagnosis or treatment.</p>
@@ -99,6 +100,18 @@ function showConsent() {
     if (!state.settings.hasApiKey) toast({ title: 'One more step', body: 'Add your Presage API key below to turn on live readings.', actions: [{ label: 'OK' }] });
   });
   $('#consent-no').addEventListener('click', () => { setNavVisible(true); state.timerOnly = true; go('home'); });
+}
+
+// Microphone consent, shown the first time breath sound analysis is turned on.
+function askMicConsent(onYes) {
+  toast({
+    title: 'Use the microphone for breath sounds?',
+    body: 'Only during breathing resets, and only after you start one. SOVA turns the sound into a loudness number every 20 ms to time your breaths. Audio is never recorded, saved or sent anywhere. You can turn this off at any time.',
+    actions: [
+      { label: 'Allow microphone', primary: true, onClick: async () => { await saveSettings({ micBreath: true }); onYes && onYes(); } },
+      { label: 'Not now' },
+    ],
+  });
 }
 
 function cameraAllowed() {
@@ -200,6 +213,11 @@ function showSummary(record) {
           <p class="small">"Not shown" means the signal was not reliable enough at that moment.</p>`
         : '<p class="small">No reset had reliable readings both before and 60 seconds after, so there is nothing to compare.</p>'}
       </section>` : '<p class="small">This session ran as a plain timer, so there are no signal readings.</p>'}
+      ${resets.some((r) => r.breathSound) ? `<section class="card stack"><h2 style="margin: 0">Breath sounds</h2>
+        ${resets.filter((r) => r.breathSound).map((r, i) => `<div class="stack" style="gap: 6px"><span class="small">Reset ${i + 1}</span>${r.breathSound.lines.map((l) => `<span>${esc(l)}</span>`).join('')}</div>`).join('')}
+        <p class="small" style="margin: 0">From the microphone during resets. Audio was never recorded.</p></section>` : ''}
+      ${record.ai && record.ai.text ? `<section class="card stack"><h2 style="margin: 0">AI reflection</h2><p style="margin: 0; line-height: 1.6">${esc(record.ai.text)}</p>
+        <p class="small" style="margin: 0">Written by Presage AI from your measured pulse, HRV and breathing. AI can be wrong. Not medical advice.</p></section>` : ''}
       <section class="card stack"><h2 style="margin: 0">Timeline</h2>${renderTimeline(record)}</section>
       <div class="row"><button class="btn primary" id="again">Start another session</button><button class="btn" id="hist">Go to History</button></div>
     </div>`;
@@ -279,8 +297,9 @@ const VIEWS = {
             <input type="number" min="0" max="12" step="1" value="${cp[k] || 0}" data-cp="${k}" style="width: 72px; background: var(--ground); border: 1px solid var(--border-strong); border-radius: 10px; min-height: 40px; padding: 0 8px"> s</label>`).join('')}
           <span class="small" id="cp-rate">${esc((Math.round(breathsPerMinute(cp) * 10) / 10).toString())} breaths/min</span>
         </div>
-        <div class="row"><button class="btn primary big" id="r-go">Start ${state.resetSeconds < 60 ? `${state.resetSeconds}-second` : `${state.resetSeconds / 60}-minute`} session</button>
-          <label class="field"><input type="checkbox" id="r-sound" ${s.soundGuide ? 'checked' : ''}> Sound guide for eyes-closed breathing</label></div>
+        <div class="row"><button class="btn primary big" id="rec-go">Start ${state.resetSeconds < 60 ? `${state.resetSeconds}-second` : `${state.resetSeconds / 60}-minute`} session</button>
+          <label class="field"><input type="checkbox" id="rec-sound" ${s.soundGuide ? 'checked' : ''}> Sound guide for eyes-closed breathing</label></div>
+        <label class="field" style="justify-content: flex-start; gap: 10px"><input type="checkbox" id="rec-mic" ${s.micBreath ? 'checked' : ''}> Breath sound analysis with the microphone: times each audible breath and reports your exhale length</label>
       </section>
       <div class="spacer"></div>
       <section class="card row" style="justify-content: space-between">
@@ -295,8 +314,12 @@ const VIEWS = {
       await saveSettings({ customPattern: next });
       $('#cp-rate').textContent = `${Math.round(breathsPerMinute(next) * 10) / 10} breaths/min`;
     }));
-    $('#r-sound').addEventListener('change', (e) => saveSettings({ soundGuide: e.target.checked }));
-    $('#r-go').addEventListener('click', quickReset);
+    $('#rec-sound').addEventListener('change', (e) => saveSettings({ soundGuide: e.target.checked }));
+    $('#rec-mic').addEventListener('change', (e) => {
+      if (e.target.checked) { e.target.checked = false; askMicConsent(() => VIEWS.recovery()); }
+      else saveSettings({ micBreath: false });
+    });
+    $('#rec-go').addEventListener('click', quickReset);
     $('#e-go').addEventListener('click', () => openEyeRest({ config: state.config }));
   },
 
@@ -498,6 +521,8 @@ const VIEWS = {
           <div class="row" style="justify-content: space-between"><span class="small">Reflections and notes</span><span>${sum.reflections} / ${sum.notes}</span></div>
           <div class="row" style="justify-content: space-between"><span class="small">Video or photos</span><span style="color: var(--accent)">None, ever</span></div>
           <div class="row" style="justify-content: space-between"><span class="small">Sent to Presage</span><span>Session sign-in${s.telemetry ? ' and anonymous diagnostics' : ' only'}</span></div>
+          <label class="field">Breath sound analysis with the microphone (resets only, never recorded) <input type="checkbox" id="mic" ${s.micBreath ? 'checked' : ''}></label>
+          <label class="field">AI reflections from Presage (check-ins and end-of-session reflection) <input type="checkbox" id="ai" ${s.aiReflections ? 'checked' : ''}></label>
           <label class="field">Share anonymous SDK diagnostics with Presage <input type="checkbox" id="telemetry" ${s.telemetry ? 'checked' : ''}></label>
           <p class="small" style="margin: 0">Diagnostics are one summary per session: SDK version, device model, frame-rate and quality counts. Never video, readings or identifiers. <a href="${PRIVACY_POLICY}" target="_blank" rel="noreferrer">Presage privacy policy</a></p>
           <div class="row"><button class="btn" id="exp-csv">Export CSV</button><button class="btn" id="exp-json">Export JSON</button><button class="btn warn" id="del">Delete all data</button></div>
@@ -541,6 +566,22 @@ const VIEWS = {
     $('#sens').addEventListener('change', (e) => saveSettings({ sensitivity: e.target.value || null }));
     const qh = () => saveSettings({ quietHours: { enabled: $('#qh-on').checked, start: $('#qh-start').value || '21:00', end: $('#qh-end').value || '08:00' } });
     ['#qh-on', '#qh-start', '#qh-end'].forEach((id) => $(id).addEventListener('change', qh));
+    $('#mic').addEventListener('change', (e) => {
+      if (e.target.checked) { e.target.checked = false; askMicConsent(() => VIEWS.settings()); }
+      else saveSettings({ micBreath: false });
+    });
+    $('#ai').addEventListener('change', (e) => {
+      if (!e.target.checked) { saveSettings({ aiReflections: false }); return; }
+      e.target.checked = false;
+      toast({
+        title: 'Turn on AI reflections?',
+        body: "When you press AI check-in, and at the end of a session, SOVA sends a short prompt with your session summary (preset, focus minutes, counts of cues, resets and eye rests, your baseline and breath-sound results) to Presage, together with the pulse, HRV and breathing values the SDK has buffered. Presage forwards it to a large language model. Never video. The reply is saved with the session on this computer. AI can be wrong and is not medical advice.",
+        actions: [
+          { label: 'Turn on', primary: true, onClick: async () => { await saveSettings({ aiReflections: true }); VIEWS.settings(); } },
+          { label: 'Cancel' },
+        ],
+      });
+    });
     $('#telemetry').addEventListener('change', async (e) => { await saveSettings({ telemetry: e.target.checked }); VIEWS.settings(); });
     $('#rm').addEventListener('change', (e) => saveSettings({ reducedMotion: e.target.checked }));
     $('#sg').addEventListener('change', (e) => saveSettings({ soundGuide: e.target.checked }));

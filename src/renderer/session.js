@@ -13,6 +13,9 @@ const { SessionEngine, formatClock } = require('../../shared/core/sessionEngine'
 const { openReset, openEyeRest } = require('./reset');
 const { applyOverrides } = require('../../shared/core/overrides');
 const audio = require('./audio');
+const { buildPrompt } = require('../../shared/core/aiPrompt');
+
+const AI_LABEL = 'Written by Presage AI from your measured pulse, HRV and breathing. AI can be wrong. Not medical advice.';
 
 const SUPPRESSION_TEXT = {
   'not-focus': 'Cues rest during breaks',
@@ -75,8 +78,10 @@ class LiveSession {
         validation: (v) => this.onValidation(v),
         reading: (r, elapsed) => this.onReading(r, elapsed),
         error: (e) => this.onError(e),
+        insight: (ev) => this.onInsight(ev),
       },
     }) : null;
+    this.pendingAI = new Map();
   }
 
   // ---- shared with the reset overlay -------------------------------------
@@ -90,6 +95,12 @@ class LiveSession {
 
   breathingUsable() { return this.usableSnapshot().breathing != null; }
   latestRatio() { return this.ratio && now() - this.ratio.t <= this.config.signals.staleAfterSeconds ? this.ratio.value : null; }
+
+  // Breathing waveform on SOVA's clock, only while breathing is reliable.
+  traceTimed() {
+    if (!this.breathingUsable() || this.traceClock == null) return [];
+    return this.trace.map((p) => ({ t: p.tsUs / 1e6 + this.traceClock, value: p.value }));
+  }
 
   recentTrace(seconds) {
     if (!this.breathingUsable() || !this.trace.length) return [];
@@ -279,7 +290,8 @@ class LiveSession {
     if (r.breathTrace && r.breathTrace.length) {
       this.trace.push(...r.breathTrace.filter((p) => p.tsUs != null));
       const end = this.trace[this.trace.length - 1].tsUs;
-      while (this.trace.length && end - this.trace[0].tsUs > 40e6) this.trace.shift();
+      this.traceClock = t - end / 1e6;   // maps SDK timestamps to SOVA's clock
+      while (this.trace.length && end - this.trace[0].tsUs > 320e6) this.trace.shift();
     }
     if (r.talking && r.talking.stable) this.cue.addTalking(r.talking.detected, t);
     if (r.blinking && r.blinking.stable) {
@@ -471,6 +483,61 @@ class LiveSession {
     }
   }
 
+  // ---- Presage AI (opt-in) --------------------------------------------------
+
+  aiEnabled() {
+    return !!(this.settings.aiReflections && this.mode === 'live' && this.measurement && this.measurement.supportsInsights);
+  }
+
+  aiContext() {
+    const count = (type) => this.events.filter((e) => e.type === type).length;
+    const b = this.baselineResult;
+    const pick = (k) => (b && b[k] && b[k].reliable ? b[k].value : null);
+    const lastSound = [...this.events].reverse().find((e) => e.type === 'reset' && e.breathSound && e.breathSound.enough);
+    return {
+      presetName: this.preset.name,
+      focusMinutes: this.engine.completedFocusSeconds / 60,
+      baseline: b ? { breathing: pick('breathing'), pulse: pick('pulse'), hrv: pick('hrv') } : null,
+      tensionCues: count('cue-tension'),
+      resets: count('reset'),
+      eyeRests: count('eye-rest'),
+      breathSound: lastSound ? lastSound.breathSound : null,
+    };
+  }
+
+  // Ask Presage AI; resolves with { text } or { error } within 25 s.
+  async askAI(kind) {
+    const prompt = buildPrompt(kind, this.aiContext());
+    let id;
+    try { id = await this.measurement.requestInsight(prompt); } catch (e) { return { error: e.message || 'Request failed' }; }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { this.pendingAI.delete(id); resolve({ error: 'No reply from Presage AI yet. Try again in a minute.' }); }, 25000);
+      this.pendingAI.set(id, (r) => { clearTimeout(timer); resolve(r); });
+    });
+  }
+
+  onInsight(ev) {
+    const done = this.pendingAI.get(ev.requestId);
+    if (!done) return;   // automatic vitals insights are not shown in SOVA
+    this.pendingAI.delete(ev.requestId);
+    done(ev.analysis ? { text: ev.analysis.trim() } : { error: ev.error || 'Presage AI returned no text.' });
+  }
+
+  async aiCheckin() {
+    const out = $('#ai-out');
+    const btn = $('#ai-btn');
+    if (!out || !btn) return;
+    btn.disabled = true;
+    out.innerHTML = '<span class="small">Asking Presage AI…</span>';
+    const r = await this.askAI('checkin');
+    this.log('ai-checkin', r.text ? { text: r.text } : { error: r.error });
+    if (!$('#ai-out')) return;
+    $('#ai-out').innerHTML = r.text
+      ? `<p style="margin: 0; line-height: 1.55">${esc(r.text)}</p><p class="small" style="margin: 0">${esc(AI_LABEL)}</p>`
+      : `<p class="small" style="margin: 0">${esc(r.error)}</p>`;
+    if ($('#ai-btn')) $('#ai-btn').disabled = false;
+  }
+
   // ---- user actions -------------------------------------------------------
 
   startReset(seconds) {
@@ -484,7 +551,7 @@ class LiveSession {
       live: this.mode === 'live' && !this.cameraPaused ? this : null,
       onDone: (res) => {
         this.engine.resume('reset');
-        const ev = this.log('reset', { seconds: res.seconds, completed: res.completed, pattern: res.patternId, before: res.before, after: null });
+        const ev = this.log('reset', { seconds: res.seconds, completed: res.completed, pattern: res.patternId, before: res.before, after: null, breathSound: res.breathSound || null });
         if (this.mode === 'live' && res.before) {
           setTimeout(() => { if (!this.ended) ev.after = this.usableSnapshot(); }, this.config.afterResetWaitSeconds * 1000);
         }
@@ -533,6 +600,10 @@ class LiveSession {
     if (this.ended) return;
     this.ended = true;
     clearInterval(this.timer);
+    let ai = null;
+    if (this.aiEnabled() && this.measurement.running && this.engine.completedFocusSeconds >= 120) {
+      ai = await this.waitForReflection();
+    }
     clearTimeout(this.slowTimer);
     this.closeFramingPreview();
     if (this.offWidget) this.offWidget();
@@ -556,8 +627,27 @@ class LiveSession {
       baseline: this.baselineResult,
       events: this.events,
       reflection: null,
+      ai,
     };
     this.onEnd && this.onEnd(record);
+  }
+
+  waitForReflection() {
+    $('#view').innerHTML = `
+      <div class="stack" style="max-width: 620px; margin-top: 6vh">
+        <h1>Writing your AI reflection</h1>
+        <p class="lead" style="margin: 0">Presage AI is looking at your pulse, HRV and breathing from this session. The camera stays on until the reply arrives, up to 25 seconds.</p>
+        <div class="progress"><div id="ai-wait" style="width: 0%"></div></div>
+        <div class="row"><button class="btn" id="ai-skip">Skip</button></div>
+      </div>`;
+    const started = now();
+    const bar = setInterval(() => { const el = $('#ai-wait'); if (el) el.style.width = `${Math.min(100, ((now() - started) / 25) * 100)}%`; }, 250);
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (r) => { if (settled) return; settled = true; clearInterval(bar); resolve(r); };
+      $('#ai-skip').addEventListener('click', () => finish(null));
+      this.askAI('reflection').then((r) => finish(r.text ? { text: r.text, at: new Date().toISOString() } : { error: r.error, at: new Date().toISOString() }));
+    });
   }
 
   // ---- rendering ------------------------------------------------------------
@@ -632,7 +722,8 @@ class LiveSession {
           <div class="card signal"><div class="signal-head"><span>Pulse</span><span id="s-pulse-note"></span></div><div id="s-pulse"></div></div>
           <div class="card signal"><div class="signal-head"><span>HRV (RMSSD)</span><span id="s-hrv-note"></span></div><div id="s-hrv"></div></div>
           <div class="pill" style="align-self: flex-start"><span class="dot${this.validation && this.validation.ok ? '' : ' warn'}" id="quality-dot"></span><span id="quality-tip">${esc(this.validation ? this.validation.tip : 'Waiting for signal')}</span></div>
-          <p class="small">Camera-based estimates for self-reflection, not medical readings. Values are hidden whenever the signal is not reliable.</p>` : `
+          <p class="small">Camera-based estimates for self-reflection, not medical readings. Values are hidden whenever the signal is not reliable.</p>
+          ${this.aiEnabled() ? `<div class="card stack" style="gap: 10px"><div class="row" style="justify-content: space-between"><strong>AI check-in</strong><button class="btn" id="ai-btn">Ask Presage AI</button></div><div id="ai-out" class="stack" style="gap: 8px"><span class="small">A short read of your pulse, HRV and breathing so far. Available after about 15 seconds of readings.</span></div></div>` : ''}` : `
           <div class="card small">Time-based eye-rest reminders still run. Breathing resets work as guided exercises without live feedback.</div>`}
           <p class="small" id="cue-state"></p>
         </aside>
@@ -651,6 +742,8 @@ class LiveSession {
     $('#end').addEventListener('click', () => this.end(false));
     const cam = $('#cam-toggle');
     if (cam) cam.addEventListener('click', () => this.toggleCamera());
+    const aiBtn = $('#ai-btn');
+    if (aiBtn) aiBtn.addEventListener('click', () => this.aiCheckin());
     this.renderRunning();
   }
 

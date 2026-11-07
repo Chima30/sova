@@ -18,6 +18,8 @@ const DEFAULT_SETTINGS = {
   customPattern: { inhale: 4, hold: 0, exhale: 6, holdAfterExhale: 0 },
   theme: 'dark',
   showWidget: true,
+  micBreath: false,            // breath sound analysis in resets (opt-in)
+  aiReflections: false,        // Presage AI reflections (opt-in)
   cueOverrides: {},            // personal sensitivity settings
   autoSound: false,            // play the preset's ambient sound at session start
   soundVolume: 0.7,
@@ -32,7 +34,7 @@ const WRITABLE = new Set([
   'consentVersion', 'telemetry', 'presetId', 'sensitivity', 'quietHours',
   'reducedMotion', 'soundGuide', 'breathingPatternId', 'customPattern', 'theme',
   'captureMode', 'cameraId', 'showWidget',
-  'cueOverrides', 'autoSound', 'soundVolume', 'soundId',
+  'cueOverrides', 'autoSound', 'soundVolume', 'soundId', 'micBreath', 'aiReflections',
 ]);
 
 class Store {

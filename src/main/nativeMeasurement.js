@@ -15,6 +15,24 @@ const {
   decodeMetrics,
 } = require('@smartspectra/node-sdk');
 const { extractLatest } = require('../../shared/core/signals');
+const protobuf = require('protobufjs');
+
+// Presage's Insight message (docs/data-types.md#insight). The Node SDK does
+// not ship a decoder for it, so SOVA defines the schema here.
+const Insight = protobuf.Root.fromJSON({
+  nested: {
+    Insight: {
+      oneofs: { result: { oneof: ['analysis', 'error'] } },
+      fields: {
+        requestId: { type: 'int32', id: 1 },
+        processedAt: { type: 'string', id: 2 },
+        analysis: { type: 'string', id: 3 },
+        error: { type: 'string', id: 4 },
+        type: { type: 'int32', id: 5 },
+      },
+    },
+  },
+}).lookupType('Insight');
 
 const SIZES = {
   standard: { width: 1280, height: 720, fps: 30 },
@@ -56,7 +74,18 @@ class NativeMeasurement {
     });
     this.sdk.on('error', (code, message, retryable) => this.send({ kind: 'error', code, message, retryable: !!retryable }));
     // Presage's automatic vitals insights (see README, Consent and data handling).
-    this.sdk.on('insight', (buf, requestId) => this.send({ kind: 'insight', requestId, bytes: buf ? buf.length : 0 }));
+    this.sdk.on('insight', (buf, requestId) => {
+      let msg = {};
+      try { msg = Insight.toObject(Insight.decode(buf)); } catch { /* undecodable */ }
+      this.send({
+        kind: 'insight',
+        requestId,
+        bytes: buf ? buf.length : 0,
+        analysis: msg.analysis || null,
+        error: msg.error || null,
+        processedAt: msg.processedAt || null,
+      });
+    });
   }
 
   _useCamera() {
@@ -89,6 +118,14 @@ class NativeMeasurement {
     if (!this.opts) return { ok: false };
     if (size) this.size = size;
     return this.start({ ...this.opts, size: this.size });
+  }
+
+  // On-demand Presage LLM Insight. Returns the request id; the reply arrives
+  // as an 'insight' event with the same id.
+  requestInsight(text) {
+    if (!this.sdk) return { ok: false, message: 'Not measuring' };
+    const requestId = this.sdk.requestInsight(String(text));
+    return { ok: true, requestId };
   }
 
   async destroy() {

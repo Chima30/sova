@@ -11,7 +11,7 @@ const { app, BrowserWindow } = require('electron');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sova-smoke-'));
 app.setPath('userData', tmp);
-fs.writeFileSync(path.join(tmp, 'sova-settings.json'), JSON.stringify({ consentVersion: 2, showWidget: true }));
+fs.writeFileSync(path.join(tmp, 'sova-settings.json'), JSON.stringify({ consentVersion: 3, showWidget: true }));
 const base = Date.parse('2026-11-06T09:00:00.000Z');
 const at = (s) => new Date(base + s * 1000).toISOString();
 fs.writeFileSync(path.join(tmp, 'sova-sessions.json'), JSON.stringify([{
@@ -96,6 +96,28 @@ app.whenReady().then(async () => {
     await wait(800);
     report.summary = await run(`document.querySelector('#view h1').textContent + ' | timeline: ' + !!document.querySelector('#view [role=img]')`);
     report.widgetClosed = !BrowserWindow.getAllWindows().some((w) => w.webContents.getURL().includes('widget.html'));
+
+    // Mic breath analysis on, no microphone in this environment: honest result screen.
+    await run(`document.querySelector('[data-nav="recovery"]').click()`);
+    await wait(500);
+    await run(`document.getElementById('rec-mic').click()`);
+    await wait(300);
+    report.micConsent = await run(`document.querySelector('.toast strong').textContent`);
+    await run(`document.querySelector('.toast .btn.primary').click()`);
+    await wait(600);
+    await run(`document.querySelector('[data-dur="30"]').click()`);
+    await wait(300);
+    await run(`document.getElementById('rec-go').click()`);
+    await wait(1500);
+    report.micStatus = await run(`document.getElementById('r-mic') ? document.getElementById('r-mic').textContent : 'none'`);
+    await run(`document.getElementById('r-end').click()`);
+    await wait(500);
+    report.micResult = await run(`document.querySelector('#overlay h1') ? document.querySelector('#overlay h1').textContent + ' | ' + document.querySelector('#overlay .lead, #overlay .list').innerText.slice(0, 90) : 'no panel'`);
+    await run(`document.getElementById('r-done').click()`);
+    await wait(300);
+    await run(`document.querySelector('[data-nav="settings"]').click()`);
+    await wait(500);
+    report.aiToggle = await run(`!!document.getElementById('ai') && !!document.getElementById('mic')`);
 
     // Sounds play/stop.
     await run(`document.querySelector('[data-nav="sounds"]').click()`);

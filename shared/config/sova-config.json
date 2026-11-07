@@ -1,6 +1,6 @@
 {
   "configVersion": 1,
-  "consentVersion": 2,
+  "consentVersion": 3,
 
   "signals": {
     "pulse":     { "minConfidence": 45, "warmupSeconds": 12, "validMin": 40, "validMax": 110 },

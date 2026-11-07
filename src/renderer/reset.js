@@ -9,6 +9,8 @@ const { $, esc, announce } = require('./dom');
 const { guideAt, breathsPerMinute, exhaleCoaching, PHASE_TEXT } = require('../../shared/core/breathing');
 const audio = require('./audio');
 const { now } = require('./measurement');
+const { startMic } = require('./micListener');
+const { cameraSign, labelEvents, summarize } = require('../../shared/core/breathSound');
 
 const WINDOW_S = 20;
 
@@ -17,12 +19,15 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
   const reduced = settings.reducedMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const before = live ? live.usableSnapshot() : null;
   const bpm = Math.round(breathsPerMinute(pattern) * 10) / 10;
+  const useMic = !!settings.micBreath;
+  const PREP = useMic ? 3 : 0;   // seconds of quiet room measurement first
 
   overlay.innerHTML = `
     <div class="overlay-top">
       <span class="num" style="color: var(--muted); font-size: 18px">Breathing reset</span>
       <div class="row">
-        <label class="field" style="min-height: 44px"><input type="checkbox" id="r-sound" ${settings.soundGuide ? 'checked' : ''}> Sound guide</label>
+        ${useMic ? '<span class="pill"><span class="dot" id="r-mic-dot"></span><span id="r-mic">Microphone: starting</span></span>' : ''}
+        <label class="field" style="min-height: 44px"><input type="checkbox" id="r-sound" ${settings.soundGuide && !useMic ? 'checked' : ''} ${useMic ? 'disabled' : ''}> Sound guide${useMic ? ' (off while the mic listens)' : ''}</label>
         <button class="btn" id="r-end">End early</button>
       </div>
     </div>
@@ -59,7 +64,12 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
   };
   $('#r-end').focus();
 
-  const t0 = now();
+  const t0 = now() + PREP;      // guide time 0 starts after the room check
+  let mic = null;
+  let micError = null;
+  if (useMic) {
+    startMic(() => now() - t0).then((m) => { mic = m; if (finished) m.stop(); }).catch((e) => { micError = e; });
+  }
   let lastPhase = null;
   let raf = 0;
   let finished = false;
@@ -102,6 +112,20 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
   function frame() {
     if (finished) return;
     const elapsed = now() - t0;
+    if (useMic) {
+      const label = $('#r-mic');
+      const dot = $('#r-mic-dot');
+      if (micError) { label.textContent = 'Microphone unavailable'; dot.className = 'dot warn'; }
+      else if (!mic || !mic.detector.calibrated) { label.textContent = 'Microphone: measuring room noise'; dot.className = 'dot warn'; }
+      else { label.textContent = `Microphone: ${mic.detector.events.length} breath sound${mic.detector.events.length === 1 ? '' : 's'} heard`; dot.className = 'dot'; }
+    }
+    if (elapsed < 0) {
+      els.phase.textContent = 'Stay quiet';
+      els.secs.textContent = `Measuring the room, ${Math.ceil(-elapsed)} s`;
+      els.left.textContent = '';
+      raf = requestAnimationFrame(frame);
+      return;
+    }
     const left = Math.max(0, seconds - elapsed);
     const g = guideAt(pattern, elapsed);
     els.phase.textContent = PHASE_TEXT[g.phase];
@@ -139,9 +163,41 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
     if (finished) return;
     finished = true;
     cancelAnimationFrame(raf);
-    overlay.hidden = true;
-    overlay.innerHTML = '';
-    onDone && onDone({ completed, seconds: Math.round(now() - t0), patternId: pattern.id || 'custom', before });
+    const doneSeconds = Math.max(0, Math.round(now() - t0));
+    const result = { completed, seconds: doneSeconds, patternId: pattern.id || 'custom', before };
+    if (!useMic) {
+      overlay.hidden = true;
+      overlay.innerHTML = '';
+      onDone && onDone(result);
+      return;
+    }
+    // Microphone results: label each heard breath, then show what SOVA found.
+    let sound = null;
+    if (mic) {
+      mic.stop();
+      const events = mic.detector.finish().filter((e) => e.start >= 0);
+      const trace = live && live.traceTimed ? live.traceTimed().map((p) => ({ t: p.t - t0, value: p.value })).filter((p) => p.t >= 0) : null;
+      const phaseAt = (t) => guideAt(pattern, t).phase;
+      const sign = trace && trace.length ? cameraSign(trace, phaseAt) : null;
+      const labelled = labelEvents(events, { trace, sign, guidePhaseAt: phaseAt });
+      sound = summarize(labelled, { pattern, seconds: Math.max(1, doneSeconds), rejectedLong: mic.detector.rejectedLong });
+    }
+    result.breathSound = sound;
+    overlay.innerHTML = `
+      <div class="stack" style="max-width: 640px; width: 100%; margin-top: 8vh">
+        <span class="small">Breathing reset · ${doneSeconds} s</span>
+        <h1>What SOVA heard</h1>
+        ${sound ? `<ul class="list card">${sound.lines.map((l) => `<li><span class="dot" style="margin-top: 7px"></span><span>${esc(l)}</span></li>`).join('')}</ul>
+          <p class="small" style="margin: 0">Breath timing from your microphone. In and out phases from ${sound.phaseSource === 'camera' ? "the camera's breathing waveform" : 'the breathing guide'}. The audio was never recorded or saved.</p>`
+        : `<p class="lead" style="margin: 0">${micError ? "SOVA couldn't use the microphone, so there are no breath sound results this time." : 'The reset ended before SOVA could listen.'}</p>`}
+        <div class="row"><button class="btn primary big" id="r-done">Done</button></div>
+      </div>`;
+    $('#r-done').focus();
+    $('#r-done').addEventListener('click', () => {
+      overlay.hidden = true;
+      overlay.innerHTML = '';
+      onDone && onDone(result);
+    });
   }
 
   $('#r-end').addEventListener('click', () => finish(false));

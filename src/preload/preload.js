@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('sova', {
     restart: invoke('sova:native:restart'),
     destroy: invoke('sova:native:destroy'),
     cameras: invoke('sova:native:cameras'),
+    requestInsight: invoke('sova:native:insight'),
     onEvent: (fn) => {
       const listener = (_e, ev) => fn(ev);
       ipcRenderer.on('sova:native:event', listener);

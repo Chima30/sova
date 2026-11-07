@@ -207,6 +207,10 @@ function registerIpc() {
   handle('sova:native:restart', (size) => safe(() => native.restart(size)));
   handle('sova:native:destroy', () => safe(() => native.destroy()));
   handle('sova:native:cameras', () => NativeMeasurement.cameras());
+  handle('sova:native:insight', (text) => safe(() => {
+    if (store.getSettings().aiReflections !== true) return { ok: false, message: 'AI reflections are off' };
+    return native.requestInsight(String(text).slice(0, 2048));
+  }));
 
   // Widget: the main window drives it; the widget sends back actions.
   handle('sova:widget:show', () => { widgetHiddenByUser = false; showWidget(); return true; });
@@ -236,7 +240,10 @@ app.whenReady().then(() => {
     const url = (details && details.requestingUrl) || (wc && wc.getURL()) || '';
     const mediaTypes = (details && details.mediaTypes) || [];
     const cameraOnly = mediaTypes.length === 1 && mediaTypes[0] === 'video';
-    callback(permission === 'media' && cameraOnly && isOwnPage(url));
+    // Microphone: only audio, only SOVA's page, only after the user turned on
+    // breath sound analysis (which shows its own consent first).
+    const micOnly = mediaTypes.length === 1 && mediaTypes[0] === 'audio' && store.getSettings().micBreath === true;
+    callback(permission === 'media' && (cameraOnly || micOnly) && isOwnPage(url));
   });
 
   registerIpc();

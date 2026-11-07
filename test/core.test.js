@@ -160,7 +160,7 @@ test('export writes empty cells for unreliable values and escapes notes', () => 
     reflection: { tags: ['Calm', 'Tired'], note: 'said "hi", then left' },
   }];
   const csv = toCSV(s).split('\n');
-  assert.match(csv[1], /^a,Studying,x,y,25,1,,71.3,,false,1,1,0,0,0,Calm; Tired,"said ""hi"", then left"$/);
+  assert.match(csv[1], /^a,Studying,x,y,25,1,,71.3,,false,1,1,0,0,0,Calm; Tired,"said ""hi"", then left",$/);
   const json = JSON.parse(toJSON(s, { theme: 'dark' }));
   assert.equal(json.app, 'SOVA');
 });
@@ -205,4 +205,20 @@ test('automatic meeting snooze can be switched off', () => {
   const e = new CueEngine(c, 'standard', preset);
   for (let t = 0; t <= 20; t += 1) e.addTalking(true, t);
   assert.equal(e.inMeeting(20), false);
+});
+
+const { buildPrompt, MAX_BYTES } = require('../shared/core/aiPrompt');
+
+test('AI prompts stay under 2048 bytes and keep the safety rules', () => {
+  const p = buildPrompt('reflection', {
+    presetName: 'Studying', focusMinutes: 48, tensionCues: 2, resets: 1, eyeRests: 3,
+    baseline: { breathing: 13.2, pulse: 70.4, hrv: null },
+    breathSound: { avgExhale: 5.2, targetExhale: 6 },
+  });
+  assert.ok(Buffer.byteLength(p, 'utf8') <= MAX_BYTES);
+  assert.match(p, /do not diagnose/);
+  assert.match(p, /13 breaths\/min, 70 bpm/);
+  assert.doesNotMatch(p, /ms HRV/, 'missing values are left out, not invented');
+  const long = buildPrompt('checkin', { presetName: 'x'.repeat(3000) });
+  assert.ok(Buffer.byteLength(long, 'utf8') <= MAX_BYTES);
 });

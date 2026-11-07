@@ -7,7 +7,7 @@ const SESSION_COLUMNS = [
   'id', 'preset', 'startedAt', 'endedAt', 'focusMinutes', 'blocksCompleted',
   'baselineBreathing', 'baselinePulse', 'baselineHrv', 'baselineReliable',
   'tensionCues', 'resets', 'eyeRests', 'meetingSnoozes', 'awayPauses',
-  'reflection', 'note',
+  'reflection', 'note', 'aiReflection',
 ];
 
 function csvCell(v) {
@@ -37,6 +37,7 @@ function sessionRow(s) {
     awayPauses: count('away'),
     reflection: s.reflection ? s.reflection.tags : null,
     note: s.reflection ? s.reflection.note : null,
+    aiReflection: s.ai && s.ai.text ? s.ai.text : null,
   };
 }
 

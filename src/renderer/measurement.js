@@ -108,7 +108,10 @@ class NativeMeasurement extends BaseMeasurement {
     else if (ev.kind === 'validation') this._validation(ev.code);
     else if (ev.kind === 'reading') this._emit('reading', ev.reading, this.elapsed());
     else if (ev.kind === 'error') this._error(ev.code, ev.message, ev.retryable);
-    else if (ev.kind === 'insight') console.info('[SOVA] Presage AI vitals insight received', ev.requestId, `${ev.bytes} bytes`);
+    else if (ev.kind === 'insight') {
+      console.info('[SOVA] Presage AI insight received', ev.requestId, `${ev.bytes} bytes`);
+      this._emit('insight', ev);
+    }
     else if (ev.kind === 'camera') console.info('[SOVA] camera (native)', JSON.stringify(ev));
   }
 
@@ -128,6 +131,13 @@ class NativeMeasurement extends BaseMeasurement {
   }
 
   async stop() { await window.sova.native.stop(); }
+
+  get supportsInsights() { return true; }
+
+  async requestInsight(text) {
+    const r = await this._call(window.sova.native.requestInsight(text));
+    return r.requestId;
+  }
 
   async restart(light) {
     if (light) this.resolution = 'light';
