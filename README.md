@@ -8,6 +8,20 @@ SOVA is not a medical application, diagnostic tool, stress detector or productiv
 
 Built for the DEV Presage SmartSpectra SDK Challenge (#presagechallenge).
 
+## SmartSpectra SDK integration (where to look)
+
+SOVA uses the Presage SmartSpectra SDK (`@smartspectra/node-sdk` 3.4.0) for every live signal. Key files:
+
+| File | What it does |
+| --- | --- |
+| [`src/main/nativeMeasurement.js`](src/main/nativeMeasurement.js) | Runs `SmartSpectraSDK` in the Electron main process: requests the breathing, cardio and face metric bundles, opens the camera with `useCamera` at 30 fps, decodes each `metrics` event with `decodeMetrics`, and forwards status, validation and errors |
+| [`src/main/main.js`](src/main/main.js) | `bindSmartSpectraIpc`, the packaged runtime path (`SMARTSPECTRA_CAPI_PATH`), camera-only permission for SOVA's own page, and the IPC that starts, restarts and stops the SDK |
+| [`src/renderer/measurement.js`](src/renderer/measurement.js) | Receives SDK events in the window, maps `ValidationCode` and `SmartSpectraErrorCode` values to user guidance; also contains the renderer-side SDK path (`useMediaStream`) as a fallback |
+| [`shared/core/signals.js`](shared/core/signals.js) | Reads `breathing.rate`, `breathing.upperTrace`, `breathing.inhaleExhaleRatio`, `cardio.pulseRate`, `cardio.hrv`, `face.blinking`, `face.talking`, and applies the confidence, stability, warm-up and range rules |
+| [`src/renderer/session.js`](src/renderer/session.js) | Uses the live signals: baseline, tension cues, meeting snooze, away pause, live breath line, before-and-after values |
+
+**Live Presage signals used:** breathing rate, breathing waveform, inhale:exhale ratio, pulse rate, HRV (RMSSD), blink detection, talking detection, and the SDK's live validation status (face, lighting, motion, frame rate).
+
 ## What works in this build (desktop, Phases 1 and 2)
 
 **Sessions and signals**
@@ -87,7 +101,7 @@ $env:SOVA_PRESAGE_API_KEY="your-key"
 5. Sit naturally for 2 minutes while the baseline is set. Live values appear only when the signal is reliable.
 6. Try **Breathing reset** to see your live breath against the target pace, and talk for 20 seconds to see the meeting snooze.
 
-No login is required. Without a key or a connection, SOVA runs as a plain focus timer and says so.
+No SOVA login is required. Live readings need your own free Presage API key (step 2). Without a key or a connection, SOVA runs as a plain focus timer and says so.
 
 ## Build installers
 
@@ -118,16 +132,33 @@ SOVA does not use the SDK's `requestInsight` AI feature.
 
 ## Consent and data handling
 
-- **Camera consent:** asked before first use, with a plain description of what happens. Without consent SOVA runs as a plain timer.
-- **Camera use:** on only during a session or reset, with an on-screen indicator and a pause button. Camera permission is granted to SOVA's own page only, video only, no microphone.
-- **Processing:** the SmartSpectra SDK computes all signals on this device. Video never leaves the computer and is never recorded or saved.
-- **Network:** each SDK measurement session authenticates with Presage's service, so live readings need internet.
-- **SDK telemetry:** off by default in SOVA (`enableTelemetry: false`). If you opt in under Settings, the SDK sends one aggregate summary per session: SDK version, platform and device model, session outcome, frame-rate and performance counts, and counts of quality warnings. It never includes video, images, measured values, user or device identifiers. See [Presage's telemetry doc](https://github.com/Presage-Security/SmartSpectra/blob/main/docs/telemetry-and-privacy.md) and [privacy policy](https://api.physiology.presagetech.com/privacypolicy).
-- **Storage:** session summaries, baselines, events, reflections, notes and settings are saved as JSON in the app's user-data folder on this computer only. No accounts, no cloud sync.
-- **Retention and deletion:** data stays until you delete it. Settings > Delete all data removes everything, including the saved API key.
-- **Export:** Settings > Export CSV or JSON.
-- **AI services:** none.
-- **Limits:** the SDK metrics are for general wellness only, are not FDA-cleared, and must not be used for diagnosis or treatment. Readings can be wrong during large motion, chewing gum, flickering light, talking (breathing), dark or striped clothing (breathing), or with the face turned away.
+**Camera consent**
+- On first launch SOVA shows a consent screen explaining what the camera is used for, what is stored and what goes to Presage. Live readings start only after the user ticks "I understand and agree" and chooses "Allow camera". Choosing "Not now" keeps SOVA as a plain focus timer with the camera off.
+- Consent can be reviewed again at any time in Settings, and is asked again if the disclosure changes.
+- The camera is on only during a focus session or a reset. An on-screen "Camera on" indicator (also shown in the floating widget) and a "Pause camera" button are always visible. SOVA never runs the camera in the background or without the user starting a session, and measures only the person who started it.
+- During a session the SDK opens the camera directly in SOVA's main process. The framing preview shown before a session uses the window's camera permission, which is granted only to SOVA's own bundled pages, video only, never the microphone.
+
+**Processing and sharing**
+- The SmartSpectra SDK computes every signal on the user's computer. Video and images are never recorded, saved or uploaded.
+- The SDK connects to Presage's service to authenticate each measurement session with the user's own API key (Presage counts usage on that key) and to fetch its processing models. SOVA itself sends no data anywhere.
+- Nothing is shared with any other party. No accounts, no cloud sync, no analytics, no ads.
+
+**Storage, retention and deletion**
+- Stored on the user's computer only, as JSON in the app's data folder (on Windows `%APPDATA%\SOVA`): session summaries, personal baselines, session events (cues, resets, eye rests, pauses, 30-second tension samples), before-and-after values, reflections, notes and settings.
+- The Presage API key is encrypted with the operating system's secure storage (Electron `safeStorage`) and never written to the repository.
+- Data is kept until the user deletes it. Settings › Delete all data removes every session, reflection, note, setting and the saved API key.
+- Settings › Export CSV or JSON gives the user a full copy of their data.
+
+**SDK telemetry**
+- Off by default in SOVA (`enableTelemetry: false`). Users can opt in under Settings › Share anonymous SDK diagnostics.
+- When on, the SDK sends one aggregate summary per session: SDK version, platform and device model, session outcome, frame-rate and performance counts, and counts of quality warnings. It never includes video, images, measured values, or user or device identifiers. See [Presage's telemetry doc](https://github.com/Presage-Security/SmartSpectra/blob/main/docs/telemetry-and-privacy.md) and [privacy policy](https://api.physiology.presagetech.com/privacypolicy).
+
+**AI services**
+- None. SOVA does not use the SDK's optional `requestInsight` AI feature or any other AI service.
+
+**Not medical**
+- SOVA is a focus and self-reflection tool. It makes no diagnosis or treatment claims, shows no stress score, and is not for medical decisions. Presage states its SDK metrics are for general wellness only and are not FDA-cleared.
+- Readings can be wrong during large motion, chewing gum, flickering light, talking (breathing), dark or striped clothing (breathing), or with the face turned away. SOVA hides any value whose confidence is too low instead of showing it.
 
 ## Project layout
 
