@@ -55,15 +55,17 @@ app.whenReady().then(async () => {
   const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('index.html'));
   const run = (js) => win.webContents.executeJavaScript(js);
   const report = {};
+  const shots = process.env.SOVA_SMOKE_SHOTS;
+  const shot = async (w, name) => { if (shots) fs.writeFileSync(path.join(shots, name), (await w.webContents.capturePage()).toPNG()); };
   try {
+    win.setSize(1440, 900);
     report.title = win.getTitle();
     for (const view of ['home', 'focus', 'recovery', 'insights', 'history', 'sounds', 'settings']) {
       await run(`document.querySelector('[data-nav="${view}"]').click()`);
       await wait(500);
       report[view] = (await run(`document.querySelector('#view h1') && document.querySelector('#view h1').textContent`)) || 'NO H1';
+      await shot(win, `${view}.png`);
     }
-    const shots = process.env.SOVA_SMOKE_SHOTS;
-    const shot = async (w, name) => { if (shots) fs.writeFileSync(path.join(shots, name), (await w.webContents.capturePage()).toPNG()); };
     await run(`document.querySelector('[data-nav="insights"]').click()`);
     await wait(500);
     await shot(win, 'insights.png');
@@ -81,7 +83,8 @@ app.whenReady().then(async () => {
     await wait(300);
     await run(`document.getElementById('f-start').click()`);
     await wait(2500);
-    report.session = await run(`document.querySelector('#view h1').textContent + ' | ' + (document.querySelector('.banner') ? document.querySelector('.banner').innerText : '')`);
+    report.session = await run(`document.querySelector('#view h1').textContent + ' | ' + (document.querySelector('#view .notice') ? document.querySelector('#view .notice').innerText : '')`);
+    await shot(win, 'session.png');
     report.widgetOpen = BrowserWindow.getAllWindows().some((w) => w.webContents.getURL().includes('widget.html'));
     const widgetWin = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('widget.html'));
     if (widgetWin) await shot(widgetWin, 'widget.png');
@@ -90,6 +93,7 @@ app.whenReady().then(async () => {
     // Reset overlay opens and closes.
     await run(`document.getElementById('reset').click()`);
     await wait(1200);
+    await shot(win, 'reset.png');
     report.resetOverlay = await run(`!document.getElementById('overlay').hidden && document.getElementById('r-phase').textContent`);
     await run(`document.getElementById('r-end').click()`);
     await wait(300);
@@ -99,6 +103,7 @@ app.whenReady().then(async () => {
     await wait(800);
     await run(`document.querySelector('[data-tag="Productive"]').click(); document.getElementById('note').value = 'smoke'; document.getElementById('save').click()`);
     await wait(800);
+    await shot(win, 'summary.png');
     report.summary = await run(`document.querySelector('#view h1').textContent + ' | timeline: ' + !!document.querySelector('#view [role=img]')`);
     report.widgetClosed = !BrowserWindow.getAllWindows().some((w) => w.webContents.getURL().includes('widget.html'));
 
@@ -108,7 +113,7 @@ app.whenReady().then(async () => {
     await run(`document.getElementById('rec-mic').click()`);
     await wait(300);
     report.micConsent = await run(`document.querySelector('.toast strong').textContent`);
-    await run(`document.querySelector('.toast .btn.primary').click()`);
+    await run(`document.querySelector('.toast .btn-primary').click()`);
     await wait(600);
     await run(`document.querySelector('[data-dur="30"]').click()`);
     await wait(300);
@@ -117,7 +122,7 @@ app.whenReady().then(async () => {
     report.micStatus = await run(`document.getElementById('r-mic') ? document.getElementById('r-mic').textContent : 'none'`);
     await run(`document.getElementById('r-end').click()`);
     await wait(500);
-    report.micResult = await run(`document.querySelector('#overlay h1') ? document.querySelector('#overlay h1').textContent + ' | ' + document.querySelector('#overlay .lead, #overlay .list').innerText.slice(0, 90) : 'no panel'`);
+    report.micResult = await run(`document.querySelector('#overlay h1') ? document.querySelector('#overlay h1').textContent + ' | ' + document.querySelector('#overlay .t-body, #overlay .rows').innerText.slice(0, 90) : 'no panel'`);
     await run(`document.getElementById('r-done').click()`);
     await wait(300);
     await run(`document.querySelector('[data-nav="settings"]').click()`);

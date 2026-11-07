@@ -1,6 +1,6 @@
 ## Install SOVA on Windows
 
-1. Download **SOVA-Setup-0.3.0.exe** below.
+1. Download **SOVA-Setup-0.4.0.exe** below.
 2. Run it. Windows SmartScreen may say "Windows protected your PC" because the installer is not code-signed yet: click **More info**, then **Run anyway**.
 3. Choose where to install, then open SOVA from the desktop or Start menu shortcut.
 4. Accept the camera consent, then paste your free Presage API key in **Settings** (get one at https://physiology.presagetech.com/auth/register).
@@ -9,6 +9,17 @@
 Requires Windows 10 or 11, 64-bit, and a webcam. Live readings need an internet connection.
 
 ## What's in this version
+
+New in 0.4.0: a full redesign.
+
+- Breath lines: a ribbon of contour lines that follows your real breathing in teal, the breathing guide in lavender, and stays still and grey when nothing is being measured
+- New workstation layout: timer ring, breathing first, pulse and HRV as supporting readings, a live session timeline
+- Top navigation, a session pill to jump back to a running session from any section
+- Redesigned Home, Focus, Recovery, Insights, History, Sounds and Settings, with a privacy dashboard
+- New sound option: keep playing during breaks
+- Tooltips for every biometric term, honest empty states, reduced-motion support throughout
+
+Everything from earlier versions:
 
 - Live breathing, pulse, HRV, blinking and talking from the Presage SmartSpectra SDK, compared with your personal baseline
 - Focus presets, adaptive breaks, tension cues, eye-rest reminders, meeting snooze and away pause

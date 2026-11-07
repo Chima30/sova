@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS = {
   aiReflections: false,        // Presage AI reflections (opt-in)
   cueOverrides: {},            // personal sensitivity settings
   autoSound: false,            // play the preset's ambient sound at session start
+  soundDuringBreaks: true,     // keep that sound playing through breaks
   soundVolume: 0.7,
   soundId: 'rain',
   captureMode: 'native',       // 'native' (main-process camera) or 'renderer'
@@ -34,7 +35,7 @@ const WRITABLE = new Set([
   'consentVersion', 'telemetry', 'presetId', 'sensitivity', 'quietHours',
   'reducedMotion', 'soundGuide', 'breathingPatternId', 'customPattern', 'theme',
   'captureMode', 'cameraId', 'showWidget',
-  'cueOverrides', 'autoSound', 'soundVolume', 'soundId', 'micBreath', 'aiReflections',
+  'cueOverrides', 'autoSound', 'soundDuringBreaks', 'soundVolume', 'soundId', 'micBreath', 'aiReflections',
 ]);
 
 class Store {

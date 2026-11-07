@@ -10,9 +10,16 @@
     const c = $('trace');
     const ctx = c.getContext('2d');
     ctx.clearRect(0, 0, c.width, c.height);
-    if (!show || !points || points.length < 4) return;
-    ctx.strokeStyle = '#7FA6E8';
-    ctx.lineWidth = 3;
+    if (!show || !points || points.length < 4) {
+      // Nothing measured: a still grey line, never an invented breath.
+      ctx.strokeStyle = 'rgba(122, 130, 150, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, c.height / 2); ctx.lineTo(c.width, c.height / 2); ctx.stroke();
+      return;
+    }
+    ctx.strokeStyle = '#5fcfc3';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
     ctx.beginPath();
     points.forEach((v, i) => {
       const x = (i / (points.length - 1)) * c.width;
@@ -23,7 +30,7 @@
   }
 
   window.sovaWidget.onState((s) => {
-    $('title').textContent = `SOVA · ${String(s.preset || '').toUpperCase()}`;
+    $('title').textContent = s.preset ? `SOVA · ${s.preset}` : 'SOVA';
     $('clock').textContent = s.clock;
     $('sub').textContent = s.line;
     $('cam-text').textContent = s.live ? (s.cameraPaused ? 'Camera paused' : 'Camera on') : 'Timer only';

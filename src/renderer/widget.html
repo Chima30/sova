@@ -2,33 +2,38 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self';">
   <title>SOVA widget</title>
   <style>
+    @font-face { font-family: "Geist"; src: url("./fonts/geist.woff2") format("woff2"); font-weight: 100 900; }
+    @font-face { font-family: "Geist Mono"; src: url("./fonts/geist-mono.woff2") format("woff2"); font-weight: 100 900; }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; background: #121A2B; color: #E6ECF5; font-family: "Inter", "Segoe UI", system-ui, sans-serif; overflow: hidden; user-select: none; }
-    .card { height: 100%; border: 1px solid #33415C; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; -webkit-app-region: drag; }
+    html, body { margin: 0; height: 100%; background: #0b0d14; color: #f0eee9; font-family: "Geist", "Segoe UI", system-ui, sans-serif; overflow: hidden; user-select: none; -webkit-font-smoothing: antialiased; }
+    .card { height: 100%; border: 1px solid rgba(240, 238, 233, 0.14); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; -webkit-app-region: drag; background: #11141c; }
     .top { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
-    .brand { font-weight: 700; letter-spacing: 2px; color: #9AA6BC; }
-    .cam { display: flex; align-items: center; gap: 6px; color: #C5CEDD; }
-    .dot { width: 7px; height: 7px; border-radius: 50%; background: #7FA6E8; }
-    .dot.warn { background: #E6B980; }
+    .brand { display: inline-flex; align-items: center; gap: 8px; color: #a3a9b8; }
+    .brand svg { color: #5fcfc3; }
+    .cam { display: flex; align-items: center; gap: 6px; color: #a3a9b8; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: #5fcfc3; box-shadow: 0 0 0 3px rgba(95, 207, 195, 0.15); }
+    .dot.warn { background: #7a8296; box-shadow: none; }
     .mid { display: flex; align-items: center; gap: 12px; }
-    .clock { font-family: "Space Grotesk", "Segoe UI", sans-serif; font-size: 34px; font-weight: 600; min-width: 96px; }
-    .live { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-    .sub { font-size: 12px; color: #9AA6BC; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .clock { font-size: 34px; font-weight: 300; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; min-width: 96px; }
+    .live { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .sub { font-size: 12px; color: #a3a9b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     canvas { width: 100%; height: 24px; display: block; }
     .row { display: flex; gap: 6px; -webkit-app-region: no-drag; }
-    button { min-height: 36px; border-radius: 999px; border: 1px solid #33415C; background: transparent; color: #E6ECF5; font: 500 13px inherit; font-family: inherit; cursor: pointer; padding: 0 12px; }
-    button.primary { flex: 1; background: #7FA6E8; color: #0B1220; border: none; font-weight: 600; }
-    button:focus-visible { outline: 2px solid #7FA6E8; outline-offset: 2px; }
-    .x { min-height: 22px; width: 22px; padding: 0; border: none; color: #9AA6BC; -webkit-app-region: no-drag; font-size: 14px; }
+    button { height: 32px; border-radius: 10px; border: 1px solid rgba(240, 238, 233, 0.14); background: #1a1e28; color: #f0eee9; font: 500 13px "Geist", "Segoe UI", sans-serif; cursor: pointer; padding: 0 12px; }
+    button:hover { background: #232836; }
+    button.primary { flex: 1; background: #f0eee9; color: #0b0d14; border-color: transparent; }
+    button.primary:hover { background: #ffffff; }
+    button:focus-visible { outline: 2px solid #5fcfc3; outline-offset: 2px; }
+    .x { height: 22px; width: 22px; padding: 0; border: none; background: transparent; color: #7a8296; -webkit-app-region: no-drag; font-size: 14px; }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="top">
-      <span class="brand" id="title">SOVA</span>
+      <span class="brand"><svg width="16" height="16" viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="1.5" opacity="0.55"/><path d="M4.5 16.5c3.5-6 7.5-6 11.5 0s8 6 11.5 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span id="title">SOVA</span></span>
       <span class="cam"><span class="dot" id="cam-dot"></span><span id="cam-text">Camera on</span>
         <button class="x" id="hide" aria-label="Hide widget for this session" title="Hide for this session">×</button></span>
     </div>

@@ -1,11 +1,13 @@
 'use strict';
 
-// Breathing reset overlay: a guide circle paced by the chosen pattern, the
-// live breath line drawn against the target pace, live inhale:exhale
-// coaching, and before values for the before-and-after record.
+// Breathing reset overlay: lavender breath lines paced by the chosen pattern,
+// your own breath in teal on top when the camera signal is steady, live
+// inhale:exhale coaching, and before values for the before-and-after record.
 // Without a live session it runs as a guided-only exercise and says so.
 
-const { $, esc, announce } = require('./dom');
+const { $, esc, announce, tip } = require('./dom');
+const { BreathLines, levelFromTrace, mark } = require('./breathLines');
+const { icon } = require('./icons');
 const { guideAt, breathsPerMinute, exhaleCoaching, PHASE_TEXT } = require('../../shared/core/breathing');
 const audio = require('./audio');
 const { now } = require('./measurement');
@@ -13,6 +15,11 @@ const { startMic } = require('./micListener');
 const { cameraSign, labelEvents, summarize } = require('../../shared/core/breathSound');
 
 const WINDOW_S = 20;
+
+function fmtLeft(s) {
+  const v = Math.max(0, Math.ceil(s));
+  return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`;
+}
 
 function openReset({ config, settings, pattern, seconds, live, onDone }) {
   const overlay = $('#overlay');
@@ -23,45 +30,48 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
   const PREP = useMic ? 3 : 0;   // seconds of quiet room measurement first
 
   overlay.innerHTML = `
-    <div class="overlay-top">
-      <span class="num" style="color: var(--muted); font-size: 18px">Breathing reset</span>
+    <div class="ov-top">
+      <div class="row"><span class="brand-mark">${mark(20)}</span><span class="t-section">Breathing reset</span><span class="t-meta">${esc(pattern.name || 'Custom pattern')} · ${esc(bpm)} breaths/min</span></div>
       <div class="row">
-        ${useMic ? '<span class="pill"><span class="dot" id="r-mic-dot"></span><span id="r-mic">Microphone: starting</span></span>' : ''}
-        <label class="field" style="min-height: 44px"><input type="checkbox" id="r-sound" ${settings.soundGuide && !useMic ? 'checked' : ''} ${useMic ? 'disabled' : ''}> Sound guide${useMic ? ' (off while the mic listens)' : ''}</label>
-        <button class="btn" id="r-end">End early</button>
+        ${useMic ? `<span class="state-chip">${icon('mic', 14)}<span class="dot warn" id="r-mic-dot"></span><span id="r-mic">Microphone: starting</span></span>` : ''}
+        <label class="switch-inline"><span class="switch"><input type="checkbox" id="r-sound" ${settings.soundGuide && !useMic ? 'checked' : ''} ${useMic ? 'disabled' : ''}><span></span></span><span>Sound guide${useMic ? ' (off while the mic listens)' : ''}</span></label>
+        <button class="btn btn-quiet" id="r-end">${icon('x', 16)}<span>End early</span></button>
       </div>
     </div>
-    <div class="guide" role="img" aria-label="Breathing guide">
-      ${reduced ? '' : '<div class="guide-target"></div><div class="guide-breath" id="r-circle"></div>'}
-      <div class="guide-text">
-        <span class="guide-phase" id="r-phase">Breathe in</span>
-        <span class="small" id="r-secs"></span>
-        <span class="num" style="font-size: 22px; color: var(--text-2); margin-top: 8px" id="r-left"></span>
+    <div class="ov-body">
+      <div class="row-between" style="align-items: flex-end">
+        <div class="stack-8">
+          <span class="phase-word" id="r-phase" aria-live="${reduced ? 'off' : 'off'}">Breathe in</span>
+          <span class="phase-secs" id="r-secs"></span>
+        </div>
+        <div class="stack-8" style="align-items: flex-end">
+          <span class="t-figure" id="r-left" style="font-family: var(--mono)"></span>
+          <span class="t-small" id="r-head">${live ? 'Follow the lavender lines' : 'Guided reset'}</span>
+        </div>
       </div>
-    </div>
-    ${reduced ? '<div class="progress" style="max-width: 340px"><div id="r-bar"></div></div>' : ''}
-    <div class="legend">
-      ${live ? '<span><span class="swatch-line"></span>Your breath (live)</span>' : ''}
-      <span><span class="swatch-dash"></span>Target pace, ${esc(bpm)} breaths/min</span>
-    </div>
-    <section class="card reset-card stack">
-      <div class="row" style="justify-content: space-between">
-        <h2 style="margin: 0" id="r-head">${live ? 'Follow the circle' : 'Guided reset'}</h2>
-        <span id="r-rate" class="small" style="font-size: 15px"></span>
+      <canvas class="reset-canvas" id="r-lines" role="img" aria-label="Breathing guide: the lines rise as you breathe in and fall as you breathe out"></canvas>
+      <div class="progress" aria-hidden="true"><div id="r-bar"></div></div>
+      <div class="reset-foot">
+        <div class="stack-8"><span class="t-small">Breathing rate</span><span class="t-body" id="r-rate">${live ? 'Waiting for a steady signal' : 'Not measuring'}</span></div>
+        <div class="stack-8"><span class="t-small">Inhale : exhale ${tip('tip-r-ie', 'How long you breathe out for each second you breathe in. A longer exhale tends to feel settling.')}</span><span class="t-body" id="r-ratio">${live ? 'Waiting for a steady signal' : 'Not measuring'}</span></div>
+        <div class="stack-8">
+          <div class="legend">
+            <span><span class="sw" style="background: var(--lavender)"></span>Guide</span>
+            ${live ? '<span><span class="sw" style="background: var(--accent)"></span>Your breath, live</span>' : ''}
+          </div>
+          <span class="t-meta">${live ? 'Camera estimates for self-reflection, not medical readings' : 'Start a focus session to see your own breath here'}</span>
+        </div>
       </div>
-      <canvas class="reset-trace" id="r-trace" width="1000" height="120" aria-label="Your breathing line compared with the target pace"></canvas>
-      <div class="row" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 12px">
-        <span id="r-ratio" class="small" style="font-size: 15px; color: var(--text-2)"></span>
-        <span class="small">${live ? 'Camera-based estimates for self-reflection, not medical readings.' : 'Start a focus session to see your live breath here.'}</span>
-      </div>
-    </section>`;
+    </div>`;
   overlay.hidden = false;
 
   const els = {
-    circle: $('#r-circle'), phase: $('#r-phase'), secs: $('#r-secs'), left: $('#r-left'),
+    phase: $('#r-phase'), secs: $('#r-secs'), left: $('#r-left'),
     bar: $('#r-bar'), rate: $('#r-rate'), ratio: $('#r-ratio'), head: $('#r-head'),
-    canvas: $('#r-trace'), sound: $('#r-sound'),
+    sound: $('#r-sound'),
   };
+  const lines = new BreathLines($('#r-lines'), { lines: 30, reduced });
+  lines.start();
   $('#r-end').focus();
 
   const t0 = now() + PREP;      // guide time 0 starts after the room check
@@ -74,41 +84,6 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
   let raf = 0;
   let finished = false;
 
-  function draw(elapsed) {
-    const ctx = els.canvas.getContext('2d');
-    const W = els.canvas.width, H = els.canvas.height;
-    ctx.clearRect(0, 0, W, H);
-    // Target pace: the guide's own fill level over the last 20 s.
-    ctx.setLineDash([6, 6]);
-    ctx.strokeStyle = '#9AA6BC';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (let x = 0; x <= W; x += 4) {
-      const t = elapsed - WINDOW_S + (x / W) * WINDOW_S;
-      const y = H - 10 - guideAt(pattern, Math.max(0, t)).scale * (H - 20);
-      if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    if (!live) return;
-    const pts = live.recentTrace(WINDOW_S);
-    if (pts.length < 4) return;
-    let min = Infinity, max = -Infinity;
-    for (const p of pts) { min = Math.min(min, p.value); max = Math.max(max, p.value); }
-    const span = max - min || 1;
-    const tEnd = pts[pts.length - 1].tsUs;
-    ctx.strokeStyle = '#7FA6E8';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    pts.forEach((p, i) => {
-      const x = W - ((tEnd - p.tsUs) / 1e6 / WINDOW_S) * W;
-      const y = H - 10 - ((p.value - min) / span) * (H - 20);
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-  }
-
   function frame() {
     if (finished) return;
     const elapsed = now() - t0;
@@ -117,12 +92,13 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
       const dot = $('#r-mic-dot');
       if (micError) { label.textContent = 'Microphone unavailable'; dot.className = 'dot warn'; }
       else if (!mic || !mic.detector.calibrated) { label.textContent = 'Microphone: measuring room noise'; dot.className = 'dot warn'; }
-      else { label.textContent = `Microphone: ${mic.detector.events.length} breath sound${mic.detector.events.length === 1 ? '' : 's'} heard`; dot.className = 'dot'; }
+      else { label.textContent = `${mic.detector.events.length} breath sound${mic.detector.events.length === 1 ? '' : 's'} heard`; dot.className = 'dot live'; }
     }
     if (elapsed < 0) {
       els.phase.textContent = 'Stay quiet';
       els.secs.textContent = `Measuring the room, ${Math.ceil(-elapsed)} s`;
       els.left.textContent = '';
+      lines.setGuide(0);
       raf = requestAnimationFrame(frame);
       return;
     }
@@ -131,9 +107,9 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
     els.phase.textContent = PHASE_TEXT[g.phase];
     els.secs.textContent = `${Math.ceil(g.secondsLeft)} s`;
     const secsLeft = Math.ceil(left);
-    els.left.textContent = `${Math.floor(secsLeft / 60)}:${String(secsLeft % 60).padStart(2, '0')}`;
-    if (els.circle) els.circle.style.transform = `scale(${0.45 + 0.55 * g.scale})`;
-    if (els.bar) els.bar.style.width = `${Math.min(100, (elapsed / seconds) * 100)}%`;
+    els.left.textContent = fmtLeft(secsLeft);
+    lines.setGuide(g.scale);
+    els.bar.style.width = `${Math.min(100, (elapsed / seconds) * 100)}%`;
     if (g.phase !== lastPhase) {
       lastPhase = g.phase;
       if (els.sound.checked) audio.pace(g.phase, g.secondsLeft);
@@ -142,19 +118,20 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
 
     if (live) {
       const u = live.usableSnapshot();
+      const usable = live.breathingUsable();
+      lines.setLive(usable ? levelFromTrace(live.recentTrace(WINDOW_S)) : null);
       if (u.breathing != null) {
         els.rate.innerHTML = before && before.breathing != null
-          ? `Breathing <strong style="color: var(--text)">${Math.round(before.breathing)} → ${Math.round(u.breathing)}</strong> breaths/min`
-          : `Breathing <strong style="color: var(--text)">${Math.round(u.breathing)}</strong> breaths/min`;
+          ? `<span class="t-num">${Math.round(before.breathing)} → ${Math.round(u.breathing)}</span> <span class="t-2">breaths/min</span>`
+          : `<span class="t-num">${Math.round(u.breathing)}</span> <span class="t-2">breaths/min</span>`;
         if (before && before.breathing != null && u.breathing < before.breathing) els.head.textContent = "You're settling";
       } else {
-        els.rate.textContent = 'Breathing: waiting for a steady signal';
+        els.rate.textContent = 'Waiting for a steady signal';
       }
-      const coach = live.breathingUsable() ? exhaleCoaching(live.latestRatio(), config.targetExhaleRatio) : null;
-      els.ratio.innerHTML = coach ? `Inhale : exhale <strong style="color: var(--text)">${esc(coach.label)}</strong>, ${esc(coach.tip.toLowerCase())}` : '';
+      const coach = usable ? exhaleCoaching(live.latestRatio(), config.targetExhaleRatio) : null;
+      els.ratio.innerHTML = coach ? `<span class="t-num">${esc(coach.label)}</span> <span class="t-2">${esc(coach.tip.toLowerCase())}</span>` : 'Waiting for a steady signal';
     }
 
-    draw(elapsed);
     if (left <= 0) return finish(true);
     raf = requestAnimationFrame(frame);
   }
@@ -163,6 +140,7 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
     if (finished) return;
     finished = true;
     cancelAnimationFrame(raf);
+    lines.stop();
     const doneSeconds = Math.max(0, Math.round(now() - t0));
     const result = { completed, seconds: doneSeconds, patternId: pattern.id || 'custom', before };
     if (!useMic) {
@@ -184,13 +162,13 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
     }
     result.breathSound = sound;
     overlay.innerHTML = `
-      <div class="stack" style="max-width: 640px; width: 100%; margin-top: 8vh">
-        <span class="small">Breathing reset · ${doneSeconds} s</span>
-        <h1>What SOVA heard</h1>
-        ${sound ? `<ul class="list card">${sound.lines.map((l) => `<li><span class="dot" style="margin-top: 7px"></span><span>${esc(l)}</span></li>`).join('')}</ul>
-          <p class="small" style="margin: 0">Breath timing from your microphone. In and out phases from ${sound.phaseSource === 'camera' ? "the camera's breathing waveform" : 'the breathing guide'}. The audio was never recorded or saved.</p>`
-        : `<p class="lead" style="margin: 0">${micError ? "SOVA couldn't use the microphone, so there are no breath sound results this time." : 'The reset ended before SOVA could listen.'}</p>`}
-        <div class="row"><button class="btn primary big" id="r-done">Done</button></div>
+      <div class="ov-top"><div class="row"><span class="brand-mark">${mark(20)}</span><span class="t-section">Breathing reset</span><span class="t-meta">${doneSeconds} s</span></div></div>
+      <div class="ov-body" style="max-width: 720px">
+        <div class="stack-8"><span class="t-small">From your microphone</span><h1 class="t-title">What SOVA heard</h1></div>
+        ${sound ? `<div class="rows">${sound.lines.map((l) => `<div class="row-item"><span class="row-title" style="font-weight: 400">${esc(l)}</span></div>`).join('')}</div>
+          <p class="t-small">Breath timing from your microphone. In and out phases from ${sound.phaseSource === 'camera' ? "the camera's breathing waveform" : 'the breathing guide'}. The audio was never recorded or saved.</p>`
+        : `<p class="t-body t-2">${micError ? "SOVA couldn't use the microphone, so there are no breath sound results this time." : 'The reset ended before SOVA could listen.'}</p>`}
+        <div class="row"><button class="btn btn-primary btn-lg" id="r-done">${icon('check', 18)}<span>Done</span></button></div>
       </div>`;
     $('#r-done').focus();
     $('#r-done').addEventListener('click', () => {
@@ -212,12 +190,13 @@ function openEyeRest({ config, onDone }) {
   const overlay = $('#overlay');
   const total = config.eyeRestSeconds;
   overlay.innerHTML = `
-    <div class="overlay-top"><span class="num" style="color: var(--muted); font-size: 18px">Eye rest</span><button class="btn" id="e-end">Skip</button></div>
-    <div class="stack" style="align-items: center; text-align: center; margin-top: 8vh; max-width: 520px">
-      <svg width="96" height="96" viewBox="0 0 48 48" fill="none" stroke="#7FA6E8" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 24s7-12 20-12 20 12 20 12-7 12-20 12S4 24 4 24z"></path><circle cx="24" cy="24" r="6"></circle></svg>
-      <h1>Look at something far away</h1>
-      <p class="lead" style="margin: 0">Let your eyes relax on a point across the room or out a window. A soft chime plays when it's time to look back.</p>
-      <span class="num" style="font-size: 56px; color: var(--accent)" id="e-left">0:${total}</span>
+    <div class="ov-top"><div class="row"><span class="brand-mark">${mark(20)}</span><span class="t-section">Eye rest</span></div><button class="btn btn-quiet" id="e-end">${icon('skip-forward', 16)}<span>Skip</span></button></div>
+    <div class="ov-body" style="max-width: 640px; align-items: flex-start">
+      <span style="color: var(--lavender)">${icon('eye', 40)}</span>
+      <h1 class="t-title" style="font-size: 32px; line-height: 40px">Look at something far away</h1>
+      <p class="t-body t-2">Let your eyes relax on a point across the room or out a window. A soft chime plays when it's time to look back.</p>
+      <span class="clock" id="e-left" style="font-size: 72px">0:${String(total).padStart(2, '0')}</span>
+      <div class="progress" style="width: 100%"><div id="e-bar"></div></div>
     </div>`;
   overlay.hidden = false;
   $('#e-end').focus();
@@ -225,7 +204,8 @@ function openEyeRest({ config, onDone }) {
   let done = false;
   const timer = setInterval(() => {
     const left = Math.max(0, total - (now() - t0));
-    $('#e-left').textContent = `0:${String(Math.ceil(left)).padStart(2, '0')}`;
+    $('#e-left').textContent = fmtLeft(left);
+    $('#e-bar').style.width = `${Math.min(100, ((total - left) / total) * 100)}%`;
     if (left <= 0) end(true);
   }, 250);
   function end(completed) {
