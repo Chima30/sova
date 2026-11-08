@@ -29,8 +29,15 @@ SOVA uses the Presage SmartSpectra SDK (`@smartspectra/node-sdk` 3.4.0) for ever
 
 ## What works in this build (desktop, Phases 1 and 2)
 
+**60-second signal check-in**
+- A quick look at breathing, pulse and HRV from Home, without starting a focus session or timer
+- Live signal quality for each reading (ready, collecting, too weak) and face detection while it measures
+- HRV needs a full minute of steady signal, so SOVA waits up to 30 seconds more for it, and shows "not ready" rather than a guess
+- Results as the median of steady readings, compared with your last check-in and with your own usual range (the middle half of your past readings, shown only after 5 readings over 3 days), never with population "normal" ranges
+- An optional "how are you feeling?" answer saved with the check-in; a Check-ins tab in History
+
 **Sessions and signals**
-- First-run camera consent with a plain-language disclosure
+- First-run name, goals and camera consent with a plain-language disclosure
 - Signal check with a framing preview, then the SDK's live validation feedback (lighting, framing, motion)
 - Direct camera capture in the main process at 30 fps, as Presage recommends, with an automatic 640x480 fallback and automatic reconnects for retryable SDK errors
 - Personal baseline from the first 2 minutes of steady signal (breathing or pulse), restarted after any interruption, with a recalibrate option
@@ -121,8 +128,8 @@ $env:SOVA_PRESAGE_API_KEY="your-key"
 
 1. `npm install`, then `npm start`.
 2. Accept the consent screen and add your own Presage API key in Settings.
-3. Open **Focus**, pick **Studying**, and press **Start**.
-4. Follow the signal check tips until the dot turns blue, then start the session.
+3. On **Home**, press **Start 60-second check-in** for the quickest look at live SDK signals.
+4. Open **Focus**, pick **Studying**, and press **Start**. Follow the signal check tips until the dot turns teal, then start the session.
 5. Sit naturally for 2 minutes while the baseline is set. Live values appear only when the signal is reliable.
 6. Try **Breathing reset** to see your live breath against the target pace, and talk for 20 seconds to see the meeting snooze.
 
@@ -170,7 +177,7 @@ SOVA calls the SDK's `requestInsight` only when the user has turned on AI reflec
 - SOVA itself sends nothing else anywhere. Nothing is shared with any other party. No accounts, no cloud sync, no analytics, no ads.
 
 **Storage, retention and deletion**
-- Stored on the user's computer only, as JSON in the app's data folder (on Windows `%APPDATA%\SOVA`): session summaries, personal baselines, session events (cues, resets, eye rests, pauses, 30-second tension samples), before-and-after values, breath-sound results, AI reflections, reflections, notes, settings, and the local profile: the name SOVA greets you by, your first-launch goals and the optional "how are you feeling?" check-ins. There are no accounts and no passwords; the profile never leaves the computer.
+- Stored on the user's computer only, as JSON in the app's data folder (on Windows `%APPDATA%\SOVA`): session summaries, personal baselines, session events (cues, resets, eye rests, pauses, 30-second tension samples), before-and-after values, signal check-in results (summary values only), breath-sound results, AI reflections, reflections, notes, settings, and the local profile: the name SOVA greets you by, your first-launch goals and the optional "how are you feeling?" check-ins. There are no accounts and no passwords; the profile never leaves the computer.
 - The Presage API key is encrypted with the operating system's secure storage (Electron `safeStorage`) and never written to the repository.
 - Data is kept until the user deletes it. Settings › Delete all data removes every session, reflection, note, check-in, setting, the local profile and the saved API key.
 - Settings › Export CSV or JSON gives the user a full copy of their data.

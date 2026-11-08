@@ -12,6 +12,7 @@ Requires Windows 10 or 11, 64-bit, and a webcam. Live readings need an internet 
 
 New in 0.5.0:
 
+- 60-second signal check-in from Home: breathing, pulse and HRV with live signal quality, compared with your last check-in and your own usual range, saved separately from focus sessions
 - Light and dark mode, following Windows by default, with a switch in the top bar and in Settings
 - A new twilight palette: periwinkle and blush, with teal kept for what SOVA really measures
 - A local profile: SOVA asks your name and what brings you here, then greets you on Home. No account, no password, stored only on your computer

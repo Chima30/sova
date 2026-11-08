@@ -406,3 +406,12 @@ button.row-item .row-aside { display: inline-flex; align-items: center; justify-
 .btn.round { border-radius: 50%; }
 .sit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
 .toast.leaving { opacity: 0; transform: translateY(6px); transition: opacity 180ms var(--ease), transform 180ms var(--ease); }
+
+/* ---- Home entry points and check-in ------------------------------------- */
+.entry { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 1180px) { .entry { grid-template-columns: 1fr; } }
+.entry .t-display { font-size: 44px; line-height: 52px; letter-spacing: -0.02em; }
+.range { position: relative; height: 10px; border-radius: 5px; background: var(--raised-2); margin: 8px 0 4px; }
+.range-band { position: absolute; top: 0; bottom: 0; border-radius: 5px; background: var(--accent-soft); }
+.range-mark { position: absolute; top: 50%; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; transform: translateY(-50%); background: var(--surface-solid); border: 3px solid var(--accent); box-shadow: 0 0 10px var(--accent-soft); }
+.row-title .dot { margin-right: 6px; vertical-align: middle; }

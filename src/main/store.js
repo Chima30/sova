@@ -50,6 +50,7 @@ class Store {
     this.settingsPath = path.join(dir, 'sova-settings.json');
     this.sessionsPath = path.join(dir, 'sova-sessions.json');
     this.resetsPath = path.join(dir, 'sova-resets.json');
+    this.checkInsPath = path.join(dir, 'sova-checkins.json');
   }
 
   _read(file, fallback) {
@@ -113,8 +114,21 @@ class Store {
     return r;
   }
 
+  listCheckIns() {
+    return this._read(this.checkInsPath, []);
+  }
+
+  // Insert or update one check-in (the feeling can be added after the results).
+  saveCheckIn(c) {
+    const all = this.listCheckIns().filter((x) => x.id !== c.id);
+    all.push(c);
+    all.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    this._write(this.checkInsPath, all);
+    return c;
+  }
+
   deleteAll() {
-    for (const f of [this.settingsPath, this.sessionsPath, this.resetsPath]) {
+    for (const f of [this.settingsPath, this.sessionsPath, this.resetsPath, this.checkInsPath]) {
       try { fs.unlinkSync(f); } catch { /* already gone */ }
     }
   }
@@ -125,6 +139,7 @@ class Store {
     return {
       sessions: sessions.length,
       resets: this.listResets().length,
+      checkIns: this.listCheckIns().length,
       reflections: sessions.filter((s) => s.reflection && (s.reflection.tags?.length || s.reflection.note)).length,
       notes: sessions.filter((s) => s.reflection && s.reflection.note).length,
       folder: this.dir,

@@ -14,6 +14,7 @@ const { allResets, exhaleTrend } = require('../../shared/core/breathHistory');
 const { BreathLines, mark } = require('./breathLines');
 const { icon } = require('./icons');
 const { formatClock } = require('../../shared/core/sessionEngine');
+const { CheckIn, renderResults } = require('./checkin');
 
 const PRIVACY_POLICY = 'https://api.physiology.presagetech.com/privacypolicy';
 const KEY_PORTAL = 'https://physiology.presagetech.com/auth/register';
@@ -198,6 +199,11 @@ function updateTopbar() {
     return;
   }
   const off = !navigator.onLine;
+  if (state.view === 'checkin') {
+    const h = '<span class="status t-small"><span class="dot live"></span>Camera on · check-in</span>';
+    if (box.dataset.html !== h) { box.innerHTML = h; box.dataset.html = h; }
+    return;
+  }
   const html = `
     <span class="status t-small">${off ? '<span class="dot warn"></span>Offline' : `<span class="dot off"></span>${cameraAllowed() ? 'Camera off' : 'Timer only'}`}</span>
     <span class="row" style="gap: 4px" title="Quick breathing reset from anywhere"><span class="keycap">${state.mod}</span><span class="keycap">Shift</span><span class="keycap">B</span></span>`;
@@ -378,7 +384,7 @@ function showConsent() {
         ${item('message-square-text', "During a session the SDK also sends your pulse, HRV and breathing values (never video) to Presage's AI service for automatic vitals check-ins, about once a minute. SOVA cannot switch this off.")}
         ${item('sliders-horizontal', "Presage's anonymous SDK diagnostics are off unless you turn them on in Settings. They never include video, your readings or anything that identifies you.")}
         ${item('mic', 'Optional and off until you turn them on, each with its own consent: breath sound analysis with the microphone (never recorded), and AI reflections from Presage.')}
-        ${item('download', 'Only session summaries, your baseline, reflections, notes, your name and check-ins are stored, on this computer. You can export or delete them at any time.')}
+        ${item('download', 'Only session summaries, signal check-in results, your baseline, reflections, notes, your name and feelings are stored, on this computer. You can export or delete them at any time.')}
       </section>
       <p class="t-small">SOVA is a focus and self-reflection tool. It is not a medical device and is not for diagnosis or treatment.</p>
       <label class="row" style="min-height: 44px; cursor: pointer"><input type="checkbox" id="consent-check"><span class="t-body">I understand and agree to camera use during sessions</span></label>
@@ -438,6 +444,69 @@ async function startSession() {
   state.session.onScreen = true;
   await state.session.begin();
   updateTopbar();
+}
+
+// ---------------------------------------------------------------------------
+// 60-second signal check-in (never starts the focus timer)
+
+function checkSummary(c) {
+  const v = c.values || {};
+  const bits = [];
+  if (v.breathing != null) bits.push(`${Math.round(v.breathing)} breaths/min`);
+  if (v.pulse != null) bits.push(`${Math.round(v.pulse)} bpm`);
+  if (v.hrv != null) bits.push(`${Math.round(v.hrv)} ms HRV`);
+  return bits.length ? bits.join(' · ') : 'no steady readings';
+}
+
+async function startCheckIn() {
+  if (liveSession()) {
+    toast({ title: 'A focus session is using the camera', body: 'End the session first, or look at its live readings on the Focus screen.', actions: [{ label: 'OK' }] });
+    return;
+  }
+  if (!cameraAllowed()) {
+    toast({ title: 'Check-ins use the camera', body: 'Give camera consent first. It is the same consent as for focus sessions.', actions: [{ label: 'Review consent', primary: true, onClick: reviewConsent }, { label: 'Not now' }] });
+    return;
+  }
+  if (!state.settings.hasApiKey) {
+    toast({ title: 'Add your Presage API key first', body: 'Check-ins need live readings from the SmartSpectra SDK.', actions: [{ label: 'Open Settings', primary: true, onClick: () => go('settings') }, { label: 'Not now' }] });
+    return;
+  }
+  cleanupView();
+  state.view = 'checkin';
+  setCurrent('home');
+  enterView();
+  const apiKey = await window.sova.getApiKey();
+  const c = new CheckIn({ config: state.config, settings: state.settings, apiKey, reducedMotion: reducedMotion(), onFinish: onCheckInFinish });
+  state.cleanup = () => c.cancel(true);
+  updateTopbar();
+  await c.begin();
+}
+
+async function onCheckInFinish({ action, record }) {
+  state.cleanup = null;
+  if (action === 'results') {
+    await window.sova.saveCheckIn(record);
+    return showCheckInResults(record, false);
+  }
+  go('home');
+}
+
+async function showCheckInResults(record, fromHistory) {
+  const [checkIns, sessions] = await Promise.all([window.sova.listCheckIns(), window.sova.listSessions()]);
+  cleanupView();
+  state.view = 'checkin-results';
+  setCurrent(fromHistory ? 'history' : 'home');
+  enterView();
+  renderResults({
+    record, checkIns, sessions, feelings: state.config.feelings, fromHistory,
+    onFeeling: (r) => window.sova.saveCheckIn(r),
+    onNext: (action) => {
+      if (action === 'reset') quickReset();
+      else if (action === 'focus') go('focus');
+      else if (action === 'history') { state.historyTab = 'checkins'; go('history'); }
+      else go('home');
+    },
+  });
 }
 
 function patternById(id) {
@@ -623,15 +692,17 @@ function pair(a, b) {
 
 const VIEWS = {
   async home() {
-    const [sessions, standalone] = await Promise.all([window.sova.listSessions(), window.sova.listResets()]);
+    const [sessions, standalone, checkIns] = await Promise.all([window.sova.listSessions(), window.sova.listResets(), window.sova.listCheckIns()]);
     if (state.view !== 'home') return;
     const preset = presetById(state.selectedPreset);
+    const lastCheck = checkIns[0];
     const s = state.settings;
     const t0 = startOfToday();
     const today = sessions.filter((x) => Date.parse(x.startedAt) >= t0);
     const focusToday = today.reduce((n, x) => n + (x.focusSeconds || 0), 0);
     const resetsToday = today.reduce((n, x) => n + countEvents(x, 'reset'), 0) + standalone.filter((r) => Date.parse(r.at) >= t0 && r.seconds >= 10).length;
     const eyesToday = today.reduce((n, x) => n + countEvents(x, 'eye-rest'), 0);
+    const checksToday = checkIns.filter((c) => Date.parse(c.at) >= t0).length;
     const last = sessions[0];
     const hour = new Date().getHours();
     const greeting = hour < 5 ? 'Good evening' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -655,46 +726,57 @@ const VIEWS = {
         ${!cameraAllowed() ? `<div class="notice"><span class="dot off"></span><span class="grow">Camera consent not given, so sessions run as plain timers.</span><button class="btn" id="give-consent">Review consent</button></div>` : ''}
         ${cameraAllowed() && !s.hasApiKey ? `<div class="notice attention"><span class="dot warn"></span><span class="grow">Add your Presage API key to turn on live readings.</span><button class="btn" id="to-settings">Open Settings</button></div>` : ''}
         ${!navigator.onLine ? '<div class="notice"><span class="dot warn"></span><span class="grow">Offline: timers, recovery and history still work. Live readings return when you reconnect.</span></div>' : ''}
-        <div class="split-r">
+        <div class="entry">
+          <section class="panel hero hero-check">
+            <canvas class="hero-lines" id="check-lines" aria-hidden="true"></canvas>
+            <div class="hero-body stack-24">
+              <div class="stack-8"><span class="t-small">About 60 seconds · no session</span><h2 class="t-display">Check your signals</h2>
+                <span class="t-body t-2">A quick look at your breathing, pulse and HRV, next to your own history.</span></div>
+              <span class="t-small" id="last-check">${lastCheck ? `Last check-in ${esc(fmtDate(lastCheck.at))}: ${esc(checkSummary(lastCheck))}` : 'No check-ins yet'}</span>
+              <div class="row"><button class="btn btn-accent btn-lg" id="h-check">${icon('activity', 18)}Start 60-second check-in</button></div>
+            </div>
+          </section>
           <section class="panel hero">
             <canvas class="hero-lines" id="home-lines" aria-hidden="true"></canvas>
             <div class="hero-body stack-24">
-              <div class="stack-8"><span class="t-small">Next session</span><h2 class="t-display">${esc(preset.name)}</h2><span class="t-body t-2">${esc(presetMeta(preset))}</span></div>
+              <div class="stack-8"><span class="t-small">Next session · ${esc(presetMeta(preset))}</span><h2 class="t-display">${esc(preset.name)}</h2>
+                <span class="t-body t-2">${cameraAllowed() && s.hasApiKey ? 'A short signal check runs first, then SOVA learns your baseline for 2 minutes.' : 'Runs as a plain timer with time-based eye-rest reminders.'}</span></div>
               <div style="max-width: 420px">${planBar(preset)}</div>
               <div class="row">
                 <button class="btn btn-primary btn-lg" id="h-start">${icon('play', 18)}Start ${esc(preset.name)}</button>
                 <button class="btn btn-quiet btn-lg" id="h-change">Change preset</button>
               </div>
-              <span class="t-small">${cameraAllowed() && s.hasApiKey ? 'A short signal check runs first, then SOVA learns your baseline for 2 minutes' : 'Runs as a plain timer with time-based eye-rest reminders'}</span>
             </div>
           </section>
-          <div class="stack-24">
-            <section class="panel">
-              <div class="panel-head"><h2 class="t-section">Today</h2><span class="t-meta">${today.length} session${today.length === 1 ? '' : 's'}</span></div>
-              <div class="rows">
-                <div class="row-item"><span class="row-title" style="font-weight: 400">Focus time</span><span class="row-aside t-figure" style="font-size: 22px">${esc(fmtMinutes(focusToday))}</span></div>
-                <div class="row-item"><span class="row-title" style="font-weight: 400">Breathing resets</span><span class="row-aside t-figure" style="font-size: 22px">${resetsToday}</span></div>
-                <div class="row-item"><span class="row-title" style="font-weight: 400">Eye rests</span><span class="row-aside t-figure" style="font-size: 22px">${eyesToday}</span></div>
-              </div>
-            </section>
-
-          </div>
         </div>
-        <section class="panel stack">
-          <div class="panel-head" style="margin-bottom: 0"><h2 class="t-section">What's going on?</h2><button class="btn btn-text" id="h-more">More in Recovery</button></div>
-          <div class="sit-grid">${situationRows(true)}</div>
-        </section>
+        <div class="split-r">
+          <section class="panel stack">
+            <div class="panel-head" style="margin-bottom: 0"><h2 class="t-section">What's going on?</h2><button class="btn btn-text" id="h-more">More in Recovery</button></div>
+            <div class="sit-grid">${situationRows(true)}</div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2 class="t-section">Today</h2><span class="t-meta">${today.length} session${today.length === 1 ? '' : 's'}</span></div>
+            <div class="rows">
+              <div class="row-item"><span class="row-title" style="font-weight: 400">Focus time</span><span class="row-aside t-figure" style="font-size: 22px">${esc(fmtMinutes(focusToday))}</span></div>
+              <div class="row-item"><span class="row-title" style="font-weight: 400">Breathing resets</span><span class="row-aside t-figure" style="font-size: 22px">${resetsToday}</span></div>
+              <div class="row-item"><span class="row-title" style="font-weight: 400">Eye rests</span><span class="row-aside t-figure" style="font-size: 22px">${eyesToday}</span></div>
+              <div class="row-item"><span class="row-title" style="font-weight: 400">Check-ins</span><span class="row-aside t-figure" style="font-size: 22px">${checksToday}</span></div>
+            </div>
+          </section>
+        </div>
         <section class="panel">
           <div class="panel-head"><h2 class="t-section">Last session</h2>${last ? `<span class="t-meta">${esc(fmtDate(last.startedAt))} · ${esc(last.presetName)} · ${esc(fmtMinutes(last.focusSeconds))}</span>` : ''}</div>
           ${last ? renderTimeline(last, { compact: true }) : empty('No sessions yet. Your first session timeline will appear here.')}
         </section>
       </div>`;
     const lines = new BreathLines($('#home-lines'), { lines: 30, reduced: true });
-    lines.draw();
-    const redraw = () => lines.draw();
+    const lines2 = new BreathLines($('#check-lines'), { lines: 30, reduced: true });
+    const redraw = () => { lines.draw(); lines2.draw(); };
+    redraw();
     window.addEventListener('resize', redraw);
     state.cleanup = () => window.removeEventListener('resize', redraw);
     $('#h-start').addEventListener('click', startSession);
+    $('#h-check').addEventListener('click', startCheckIn);
     $('#h-change').addEventListener('click', () => go('focus'));
     $('#h-more').addEventListener('click', () => go('recovery'));
     bindSituations();
@@ -945,8 +1027,28 @@ const VIEWS = {
     const tabs = `<div class="seg" role="tablist" aria-label="History">
         <button role="tab" aria-selected="${tab === 'sessions'}" data-htab="sessions">Sessions</button>
         <button role="tab" aria-selected="${tab === 'breathing'}" data-htab="breathing">Breathing</button>
+        <button role="tab" aria-selected="${tab === 'checkins'}" data-htab="checkins">Check-ins</button>
       </div>`;
-    if (tab === 'breathing') {
+    if (tab === 'checkins') {
+      const checkIns = await window.sova.listCheckIns();
+      if (state.view !== 'history') return;
+      $('#view').innerHTML = `
+        ${pageHead('History', 'Your 60-second signal check-ins, stored only on this computer.', tabs)}
+        <section class="panel">
+          <div class="panel-head"><h2 class="t-section">All check-ins</h2><span class="t-meta">${checkIns.length}</span></div>
+          ${checkIns.length ? `<div class="rows">${checkIns.map((c) => `
+            <button class="row-item" data-cid="${esc(c.id)}">
+              <span class="row-title">${esc(checkSummary(c))}</span>
+              <span class="row-sub">${esc(fmtDate(c.at))}${c.feeling ? ` · felt ${esc(c.feeling.toLowerCase())}` : ''}${c.faceInViewPct != null ? ` · face in view ${c.faceInViewPct}%` : ''}</span>
+              <span class="row-aside">${icon('chevron-right', 16)}</span>
+            </button>`).join('')}</div>` : empty('No check-ins yet. Start one from Home: it takes about a minute.', '<div><button class="btn" id="to-home">Open Home</button></div>')}
+        </section>`;
+      $$('[data-cid]').forEach((b) => b.addEventListener('click', () => {
+        const c = checkIns.find((x) => x.id === b.dataset.cid);
+        if (c) showCheckInResults(c, true);
+      }));
+      const th = $('#to-home'); if (th) th.addEventListener('click', () => go('home'));
+    } else if (tab === 'breathing') {
       const resets = allResets(sessions, standalone).filter((r) => r.seconds >= 10);
       const trend = exhaleTrend(resets);
       const maxV = Math.max(1, ...trend.map((t) => Math.max(t.avgExhale, t.target)));
@@ -1134,7 +1236,8 @@ const VIEWS = {
             <div class="panel-head"><h2 class="t-section">Privacy</h2><a class="t-small" href="${PRIVACY_POLICY}" target="_blank" rel="noreferrer">Presage privacy policy ${icon('external-link', 14)}</a></div>
             <div class="rows" style="margin-bottom: 8px">
               ${prow('Camera video and photos', 'Never recorded or saved', true)}
-              ${prow('Your name, goals and check-ins', 'Stored only here, no account', true)}
+              ${prow('Your name, goals and feeling check-ins', 'Stored only here, no account', true)}
+              ${prow('Signal check-in results', 'Summary values only, stored here', true)}
               ${prow('Microphone audio', s.micBreath ? 'Loudness only, never recorded' : 'Off', true)}
               ${prow('Camera consent', cameraAllowed() ? `Given · version ${s.consentVersion}` : 'Not given, timer only', cameraAllowed())}
               ${prow('Sent to Presage during sessions', `Sign-in and vitals for automatic AI check-ins${s.telemetry ? ', anonymous diagnostics' : ''}`, false)}
@@ -1152,7 +1255,7 @@ const VIEWS = {
               ${stat('Sessions', sum.sessions)}
               ${stat('Recovery resets', sum.resets)}
               ${stat('Reflections', sum.reflections)}
-              ${stat('Notes', sum.notes)}
+              ${stat('Check-ins', sum.checkIns || 0)}
             </div>
             <div class="row"><button class="btn" id="exp-csv">${icon('download', 16)}Export CSV</button><button class="btn" id="exp-json">${icon('download', 16)}Export JSON</button><span class="grow"></span><button class="btn btn-quiet btn-danger" id="del">${icon('trash-2', 16)}Delete all data</button></div>
           </section>
@@ -1216,7 +1319,7 @@ const VIEWS = {
     $('#exp-json').addEventListener('click', () => window.sova.exportData('json'));
     $('#del').addEventListener('click', () => toast({
       title: 'Delete all SOVA data?',
-      body: 'This removes every session, breathing reset, reflection, note, AI reflection, setting and your saved API key from this computer. It cannot be undone.',
+      body: 'This removes every session, signal check-in, breathing reset, reflection, note, AI reflection, setting and your saved API key from this computer. It cannot be undone.',
       actions: [
         { label: 'Delete everything', primary: true, onClick: async () => { await window.sova.deleteAll(); state.settings = await window.sova.getSettings(); announce('All data deleted'); state.timerOnly = false; state.selectedPreset = state.settings.presetId; startOnboarding(); } },
         { label: 'Cancel' },

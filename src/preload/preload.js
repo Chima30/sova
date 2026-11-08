@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('sova', {
   saveSession: invoke('sova:sessions:save'),
   listResets: invoke('sova:resets:list'),
   saveReset: invoke('sova:resets:save'),
+  listCheckIns: invoke('sova:checkins:list'),
+  saveCheckIn: invoke('sova:checkins:save'),
   dataSummary: invoke('sova:data:summary'),
   exportData: invoke('sova:data:export'),
   deleteAll: invoke('sova:data:delete-all'),

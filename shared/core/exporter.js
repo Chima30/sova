@@ -64,7 +64,9 @@ function resetRow(r) {
 }
 
 // Sessions table, then (when there are any) a breathing resets table.
-function toCSV(sessions, standaloneResets) {
+const CHECKIN_COLUMNS = ['at', 'seconds', 'breathing', 'pulse', 'hrv', 'feeling', 'faceInViewPct'];
+
+function toCSV(sessions, standaloneResets, checkIns) {
   const { allResets } = require('./breathHistory');
   const lines = [SESSION_COLUMNS.join(',')];
   for (const s of sessions) {
@@ -79,10 +81,17 @@ function toCSV(sessions, standaloneResets) {
       lines.push(RESET_COLUMNS.map((c) => csvCell(row[c])).join(','));
     }
   }
+  if (checkIns && checkIns.length) {
+    lines.push('', '# Signal check-ins', CHECKIN_COLUMNS.join(','));
+    for (const c of checkIns) {
+      const row = { at: c.at, seconds: c.seconds, ...(c.values || {}), feeling: c.feeling || null, faceInViewPct: c.faceInViewPct };
+      lines.push(CHECKIN_COLUMNS.map((k) => csvCell(row[k])).join(','));
+    }
+  }
   return lines.join('\n') + '\n';
 }
 
-function toJSON(sessions, settings, standaloneResets) {
+function toJSON(sessions, settings, standaloneResets, checkIns) {
   return JSON.stringify({
     app: 'SOVA',
     exportedAt: new Date().toISOString(),
@@ -90,6 +99,7 @@ function toJSON(sessions, settings, standaloneResets) {
     settings: settings || null,
     sessions,
     recoveryResets: standaloneResets || [],
+    checkIns: checkIns || [],
   }, null, 2);
 }
 

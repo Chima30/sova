@@ -229,3 +229,52 @@ test('AI prompts stay under 2048 bytes and keep the safety rules', () => {
   const long = buildPrompt('checkin', { presetName: 'x'.repeat(3000) });
   assert.ok(Buffer.byteLength(long, 'utf8') <= MAX_BYTES);
 });
+
+const ci = require('../shared/core/checkIns');
+
+test('check-in summary uses the median of steady readings and leaves thin signals empty', () => {
+  const s = ci.summarize({ breathing: [14, 15, 30, 14.5], pulse: [70, 72], hrv: [] });
+  assert.equal(s.breathing, 14.8);
+  assert.equal(s.pulse, null, 'two readings are not enough');
+  assert.equal(s.hrv, null);
+});
+
+test('personal range needs enough readings over enough days, then uses the middle half', () => {
+  const day = (d) => `2026-11-0${d}T09:00:00.000Z`;
+  const few = [{ value: 12, at: day(1) }, { value: 13, at: day(1) }, { value: 14, at: day(2) }];
+  const r0 = ci.personalRange(few);
+  assert.equal(r0.ready, false);
+  assert.equal(r0.have, 3);
+  const many = [12, 13, 14, 15, 16, 30].map((v, i) => ({ value: v, at: day((i % 4) + 1) }));
+  const r = ci.personalRange(many);
+  assert.equal(r.ready, true);
+  assert.equal(r.low, 13.3);
+  assert.equal(r.high, 15.8);
+  assert.equal(ci.position(17, r), 'above');
+  assert.equal(ci.position(14, r), 'within');
+  assert.equal(ci.position(null, r), null, 'no value, no position');
+});
+
+test('history mixes check-ins and reliable session baselines only', () => {
+  const h = ci.history('breathing',
+    [{ id: 'a', at: '2026-11-01', values: { breathing: 14 } }, { id: 'b', at: '2026-11-02', values: { breathing: null } }, { id: 'now', at: '2026-11-03', values: { breathing: 20 } }],
+    [{ startedAt: '2026-11-01', baseline: { breathing: { value: 13, reliable: true } } }, { startedAt: '2026-11-02', baseline: { breathing: { value: 9, reliable: false } } }],
+    'now');
+  assert.deepEqual(h.map((x) => x.value), [14, 13]);
+});
+
+test('comparison with the last check-in skips ones without that signal', () => {
+  const list = [
+    { id: '1', at: '2026-11-01T08:00', values: { breathing: 14 } },
+    { id: '2', at: '2026-11-02T08:00', values: { breathing: null } },
+  ];
+  const cur = { id: '3', at: '2026-11-03T08:00', values: { breathing: 17, hrv: null } };
+  assert.deepEqual(ci.compareWithLast('breathing', cur, list), { previous: 14, previousAt: '2026-11-01T08:00', diff: 3 });
+  assert.equal(ci.compareWithLast('hrv', cur, list), null);
+});
+
+test('export includes signal check-ins, with empty cells for signals not shown', () => {
+  const csv = toCSV([], [], [{ id: 'c1', at: '2026-11-08T09:00:00.000Z', seconds: 60, values: { breathing: 14.5, pulse: 71, hrv: null }, feeling: 'Calm', faceInViewPct: 98 }]);
+  assert.match(csv, /# Signal check-ins/);
+  assert.match(csv, /2026-11-08T09:00:00.000Z,60,14.5,71,,Calm,98/);
+});

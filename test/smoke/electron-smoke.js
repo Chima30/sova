@@ -30,6 +30,14 @@ fs.writeFileSync(path.join(tmp, 'sova-sessions.json'), JSON.stringify([{
   reflection: { tags: ['Calm'], note: 'Smoke test note' },
 }]));
 
+// Seven check-ins over five days, so the personal range is ready.
+fs.writeFileSync(path.join(tmp, 'sova-checkins.json'), JSON.stringify([17, 14, 13, 15, 12, 14, 13].map((b, i) => ({
+  id: `c${i}`, at: new Date(Date.now() - (i * 26 + 1) * 3600e3).toISOString(), seconds: 72,
+  values: { breathing: b, pulse: 68 + i, hrv: i % 2 ? 41 + i : null },
+  readings: { breathing: 20, pulse: 40, hrv: i % 2 ? 6 : 0 },
+  quality: { breathing: 'ok', pulse: 'ok', hrv: i % 2 ? 'ok' : 'warming-up' },
+  faceInViewPct: 97, feeling: i === 1 ? 'Calm' : null,
+}))));
 fs.writeFileSync(path.join(tmp, 'sova-resets.json'), JSON.stringify([
   { id: 'r_b', at: at(86400), seconds: 60, completed: true, patternId: 'calm-6', breathSound: { enough: true, avgExhale: 4.8, targetExhale: 6, heardExhales: 6, guidedBreaths: 6, lines: ['Your exhales averaged 4.8 s against a 6 s target (6 of about 6 heard).', 'Your exhales were steady from breath to breath.'] } },
   { id: 'r_a', at: at(3600), seconds: 60, completed: true, patternId: 'calm-6', breathSound: { enough: true, avgExhale: 3.1, targetExhale: 6, heardExhales: 6, guidedBreaths: 6, lines: ['Your exhales averaged 3.1 s against a 6 s target (6 of about 6 heard).'] } },
@@ -53,7 +61,7 @@ require('../../src/main/main.js');
 app.whenReady().then(async () => {
   await wait(2500);
   const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('index.html'));
-  const run = (js) => win.webContents.executeJavaScript(js);
+  const run = (js) => win.webContents.executeJavaScript(js).catch((e) => { throw new Error(`${e.message} in: ${js.slice(0, 120)}`); });
   const report = {};
   const shots = process.env.SOVA_SMOKE_SHOTS;
   const shot = async (w, name) => { if (shots) fs.writeFileSync(path.join(shots, name), (await w.webContents.capturePage()).toPNG()); };
@@ -157,6 +165,24 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('[data-htab="breathing"]').click()`);
     await wait(500);
     report.breathingTab = await run(`document.querySelectorAll('#view .list > li').length + ' resets | chart: ' + !!document.querySelector('[aria-label^="Average exhale"]')`);
+    await run(`document.querySelector('[data-htab="checkins"]').click()`);
+    await wait(500);
+    report.checkInTab = await run(`document.querySelectorAll('[data-cid]').length + ' check-ins'`);
+    await run(`document.querySelector('[data-cid]').click()`);
+    await wait(700);
+    report.checkInResults = await run(`document.querySelector('#view h1').textContent + ' | range bars: ' + document.querySelectorAll('.range').length + ' | ' + [...document.querySelectorAll('#view .panel .t-small')].map((e) => e.textContent).filter((t) => /usual|since|HRV needs/.test(t)).join(' / ')`);
+    await shot(win, 'checkin-results.png');
+    await run(`document.querySelector('[data-cifeel="Tired"]').click()`);
+    await wait(300);
+    await run(`document.getElementById('ci-back').click()`);
+    await wait(500);
+    report.checkInFeelingSaved = await run(`document.querySelector('[data-cid]').innerText.includes('felt tired')`);
+    await run(`document.querySelector('[data-nav="home"]').click()`);
+    await wait(700);
+    await shot(win, 'home-entry.png');
+    await run(`document.getElementById('h-check').click()`);
+    await wait(300);
+    report.checkInNoKey = await run(`(document.querySelector('.toast strong') || {}).textContent || 'no toast'`);
     await shot(win, 'breathing.png');
 
     // Sounds play/stop.
