@@ -45,7 +45,11 @@ Every multi-step flow is a named state machine declared in `shared/core/machines
 
 ## UI system
 
-Tokens live at the top of `src/renderer/styles.css` (light and dark). Use the variables, never raw colours. Teal (`--accent`) means a live measurement, lavender (`--lavender`) means guidance, grey means nothing measured. One easing curve (`--ease`), sentence case, no exclamation marks, no gradient text.
+Tokens live at the top of `src/renderer/styles.css` (light and dark). Use the variables, never raw colours. Orange (`--accent`) means a live measurement, lavender (`--lavender`) means guidance, grey means nothing measured. Frosted glass panels (`.panel`, `.tile`), black pill buttons for the main action. Sentence case, no exclamation marks, no gradient text.
+
+The breath orb (`breathOrb.js`) is the centrepiece. It follows the same rule as the breath lines: orange and moving with your breath only while breathing is usable, pulse rings only while pulse is usable, lavender for guides, still and grey otherwise.
+
+Motion lives in `motion.js` and the CSS keyframes. `--ease` for movement, `--spring` only for small pops (chips, switches, the rail marker). Cards rise in turn when a section opens, counts that are not readings count up, charts draw in. Live readings never count up, because a tween shows values that were never measured; a changed reading slides in instead (`.roll`). All motion stops with reduced motion.
 
 ## Git
 

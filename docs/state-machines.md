@@ -142,7 +142,7 @@ Code: `src/renderer/reset.js (openReset frame loop)`.
 | State | Meaning |
 | --- | --- |
 | `room-check` | First 3 s with the microphone on: measuring room noise, guide waits |
-| `guiding` | Phase word, seconds and lavender lines from guideAt(pattern, t); teal lines when breathing is steady |
+| `guiding` | Phase word, seconds and lavender lines from guideAt(pattern, t); orange lines when breathing is steady |
 | `results` | What SOVA heard (microphone) or straight back, once the time is up or End early |
 
 ### Breath sound detector (`mic`)

@@ -8,10 +8,10 @@
     @font-face { font-family: "Geist"; src: url("./fonts/geist.woff2") format("woff2"); font-weight: 100 900; }
     @font-face { font-family: "Geist Mono"; src: url("./fonts/geist-mono.woff2") format("woff2"); font-weight: 100 900; }
     * { box-sizing: border-box; }
-    :root { --bg: #12102a; --card: #1d1a3c; --hair: rgba(236, 232, 255, 0.15); --text: #f4f1fb; --text-2: #bab5d7; --muted: #8e89b0; --accent: #6fd8c6; --btn: #2a2652; --btn-2: #36315f; --primary: #f4f1fb; --primary-ink: #17142f; }
-    [data-theme="light"] { --bg: #f4f1fa; --card: #ffffff; --hair: rgba(44, 36, 96, 0.15); --text: #221e45; --text-2: #565280; --muted: #7f7ba0; --accent: #14907f; --btn: #f1edfb; --btn-2: #e6e0f6; --primary: #2b2564; --primary-ink: #ffffff; }
+    :root { --bg: #0f0e14; --card: #1b1a22; --hair: rgba(255, 255, 255, 0.12); --text: #f3f2f7; --text-2: #b1aec2; --muted: #86839b; --accent: #ff7442; --btn: #26252e; --btn-2: #32313b; --primary: #f3f2f7; --primary-ink: #121117; }
+    [data-theme="light"] { --bg: #eeedf3; --card: #ffffff; --hair: rgba(30, 26, 54, 0.12); --text: #16151c; --text-2: #5a5868; --muted: #8a8898; --accent: #ee5a22; --btn: #f1f0f5; --btn-2: #e6e5ec; --primary: #16151c; --primary-ink: #ffffff; }
     html, body { margin: 0; height: 100%; background: transparent; color: var(--text); font-family: "Geist", "Segoe UI", system-ui, sans-serif; overflow: hidden; user-select: none; -webkit-font-smoothing: antialiased; }
-    .card { height: 100%; border: 1px solid var(--hair); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; overflow: hidden; -webkit-app-region: drag; background: var(--card); }
+    .card { height: 100%; border: 1px solid var(--hair); border-radius: 18px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; overflow: hidden; -webkit-app-region: drag; background: var(--card); }
     .top { display: flex; justify-content: space-between; align-items: center; font-size: 11px; height: 18px; }
     .brand span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
     .brand { display: inline-flex; align-items: center; gap: 8px; color: var(--text-2); }
@@ -25,7 +25,7 @@
     .sub { font-size: 11px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     canvas { width: 100%; height: 18px; display: block; }
     .row { display: flex; gap: 6px; -webkit-app-region: no-drag; }
-    button { height: 28px; border-radius: 8px; border: 1px solid var(--hair); background: var(--btn); color: var(--text); font: 500 12px "Geist", "Segoe UI", sans-serif; cursor: pointer; padding: 0 10px; }
+    button { height: 28px; border-radius: 999px; border: 1px solid var(--hair); background: var(--btn); color: var(--text); font: 500 12px "Geist", "Segoe UI", sans-serif; cursor: pointer; padding: 0 10px; }
     button:hover { background: var(--btn-2); }
     button.primary { flex: 1; background: var(--primary); color: var(--primary-ink); border-color: transparent; }
     button.primary:hover { filter: brightness(1.08); }

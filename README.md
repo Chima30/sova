@@ -129,7 +129,7 @@ $env:SOVA_PRESAGE_API_KEY="your-key"
 1. `npm install`, then `npm start`.
 2. Accept the consent screen and add your own Presage API key in Settings.
 3. On **Home**, press **Start 60-second check-in** for the quickest look at live SDK signals.
-4. Open **Focus**, pick **Studying**, and press **Start**. Follow the signal check tips until the dot turns teal, then start the session.
+4. Open **Focus**, pick **Studying**, and press **Start**. Follow the signal check tips until the dot turns orange, then start the session.
 5. Sit naturally for 2 minutes while the baseline is set. Live values appear only when the signal is reliable.
 6. Try **Breathing reset** to see your live breath against the target pace, and talk for 20 seconds to see the meeting snooze.
 
