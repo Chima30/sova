@@ -900,7 +900,7 @@ const VIEWS = {
             <div class="stack-8"><span class="t-small">Preview</span><span class="t-title" id="rec-phase">Breathe in</span></div>
             <span class="t-meta" id="rec-pat">${esc(patternMeta(pattern))}</span>
           </div>
-          <div class="reset-stage" style="height: 300px" aria-hidden="true"><canvas class="reset-canvas" id="rec-lines"></canvas><canvas class="orb" id="rec-orb"></canvas></div>
+          <canvas class="reset-canvas" id="rec-lines" style="height: 260px" aria-hidden="true"></canvas>
           <div class="row-between">
             <div class="stepper" role="group" aria-label="Reset length">
               <span class="t-small">Duration</span>
@@ -944,22 +944,19 @@ const VIEWS = {
 
     // Lavender preview of the chosen pattern; still in reduced motion.
     const lines = new BreathLines($('#rec-lines'), { lines: 28, reduced: reducedMotion() });
-    const orb = new BreathOrb($('#rec-orb'), { reduced: reducedMotion(), size: 0.36 });
     lines.start();
-    orb.start();
     const t0 = performance.now();
     let lastPhase = null;
     const tick = () => {
       const p = currentPattern();
-      if (reducedMotion()) { lines.setGuide(0.6); orb.setGuide(0.6); $('#rec-phase').textContent = 'Preview'; return; }
+      if (reducedMotion()) { lines.setGuide(0.6); $('#rec-phase').textContent = 'Preview'; return; }
       const g = guideAt(p, (performance.now() - t0) / 1000);
       lines.setGuide(g.scale);
-      orb.setGuide(g.scale);
       if (g.phase !== lastPhase) { lastPhase = g.phase; $('#rec-phase').textContent = PHASE_TEXT[g.phase]; }
     };
     tick();
     const timer = setInterval(tick, 50);
-    state.cleanup = () => { clearInterval(timer); lines.stop(); orb.stop(); };
+    state.cleanup = () => { clearInterval(timer); lines.stop(); };
 
     const setDur = (v) => {
       state.resetSeconds = Math.max(L.min, Math.min(L.max, v));

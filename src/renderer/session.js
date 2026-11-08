@@ -12,7 +12,7 @@ const { CueEngine, inQuietHours } = require('../../shared/core/cueEngine');
 const { SessionEngine, formatClock } = require('../../shared/core/sessionEngine');
 const { openReset, openEyeRest } = require('./reset');
 const { BreathLines, levelFromTrace } = require('./breathLines');
-const { BreathOrb } = require('./breathOrb');
+const { BreathHeart } = require('./breathHeart');
 const { icon } = require('./icons');
 const { renderTimeline } = require('./timeline');
 const { applyOverrides } = require('../../shared/core/overrides');
@@ -877,7 +877,7 @@ class LiveSession {
 
     this.lines = new BreathLines($('#breath-lines'), { reduced: this.reducedMotion() });
     this.lines.start();
-    this.orb = new BreathOrb($('#breath-orb'), { reduced: this.reducedMotion(), size: 0.36 });
+    this.orb = new BreathHeart($('#breath-orb'), { reduced: this.reducedMotion() });
     this.orb.start();
     this.shown = {};
     this.lastTimelineAt = 0;
@@ -897,11 +897,12 @@ class LiveSession {
     const level = live ? levelFromTrace(this.recentTrace(12)) : null;
     this.lines.setLive(level);
     if (this.orb) {
-      // Orange and breathing only with a usable breath; pulse rings only
-      // with a usable pulse. Otherwise the orb stays still and grey.
-      this.orb.setLive(level);
+      // The heart swells with a usable breath and beats at a usable pulse.
+      // With only a pulse it holds still between beats; with neither it
+      // stays pale and still.
       const pulse = this.mode === 'live' && !this.cameraPaused ? this.usableSnapshot().pulse : null;
-      this.orb.setPulse(level != null ? pulse : null);
+      this.orb.setLive(level != null ? level : (pulse != null ? 0.35 : null));
+      this.orb.setPulse(pulse);
     }
     const src = $('#breath-source');
     if (src) src.textContent = live ? 'Live from your camera' : (this.mode === 'live' ? 'No steady breathing signal yet' : 'Not measuring');

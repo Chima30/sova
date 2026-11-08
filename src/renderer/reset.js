@@ -7,7 +7,6 @@
 
 const { $, esc, announce, tip } = require('./dom');
 const { BreathLines, levelFromTrace, mark } = require('./breathLines');
-const { BreathOrb } = require('./breathOrb');
 const { icon } = require('./icons');
 const { guideAt, breathsPerMinute, exhaleCoaching, PHASE_TEXT } = require('../../shared/core/breathing');
 const audio = require('./audio');
@@ -47,13 +46,10 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
         </div>
         <div class="stack-8" style="align-items: flex-end">
           <span class="t-figure" id="r-left" style="font-family: var(--mono)"></span>
-          <span class="t-small" id="r-head">${live ? 'Follow the lavender orb' : 'Guided reset'}</span>
+          <span class="t-small" id="r-head">${live ? 'Follow the lavender lines' : 'Guided reset'}</span>
         </div>
       </div>
-      <div class="reset-stage" role="img" aria-label="Breathing guide: the orb grows as you breathe in and shrinks as you breathe out">
-        <canvas class="reset-canvas" id="r-lines" aria-hidden="true"></canvas>
-        <canvas class="orb" id="r-orb" aria-hidden="true"></canvas>
-      </div>
+      <canvas class="reset-canvas" id="r-lines" role="img" aria-label="Breathing guide: the lines rise as you breathe in and fall as you breathe out"></canvas>
       <div class="progress" aria-hidden="true"><div id="r-bar"></div></div>
       <div class="reset-foot">
         <div class="stack-8"><span class="t-small">Breathing rate</span><span class="t-body" id="r-rate">${live ? 'Waiting for a steady signal' : 'Not measuring'}</span></div>
@@ -76,9 +72,6 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
   };
   const lines = new BreathLines($('#r-lines'), { lines: 30, reduced });
   lines.start();
-  // The orb is the guide to follow; your own breath shows in the lines.
-  const orb = new BreathOrb($('#r-orb'), { reduced, size: 0.34 });
-  orb.start();
   $('#r-end').focus();
 
   const t0 = now() + PREP;      // guide time 0 starts after the room check
@@ -106,7 +99,6 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
       els.secs.textContent = `Measuring the room, ${Math.ceil(-elapsed)} s`;
       els.left.textContent = '';
       lines.setGuide(0);
-      orb.setGuide(null);
       raf = requestAnimationFrame(frame);
       return;
     }
@@ -117,7 +109,6 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
     const secsLeft = Math.ceil(left);
     els.left.textContent = fmtLeft(secsLeft);
     lines.setGuide(g.scale);
-    orb.setGuide(g.scale);
     els.bar.style.width = `${Math.min(100, (elapsed / seconds) * 100)}%`;
     if (g.phase !== lastPhase) {
       lastPhase = g.phase;
@@ -150,7 +141,6 @@ function openReset({ config, settings, pattern, seconds, live, onDone }) {
     finished = true;
     cancelAnimationFrame(raf);
     lines.stop();
-    orb.stop();
     const doneSeconds = Math.max(0, Math.round(now() - t0));
     const result = { completed, seconds: doneSeconds, patternId: pattern.id || 'custom', before };
     if (!useMic) {

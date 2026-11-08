@@ -385,9 +385,6 @@ button.row-item:hover { background: var(--raised); padding-left: 14px; }
 .phase-word { font-size: 52px; line-height: 1; font-weight: 300; letter-spacing: -0.03em; transition: opacity 300ms var(--ease); }
 .phase-secs { font-family: var(--mono); font-size: 16px; color: var(--text-2); }
 .reset-canvas { width: 100%; height: 320px; display: block; }
-.reset-stage { position: relative; height: 380px; }
-.reset-stage .orb { position: absolute; inset: 0; }
-.reset-stage .reset-canvas { position: absolute; left: 0; right: 0; top: 50%; height: 180px; transform: translateY(-50%); opacity: 0.55; }
 .reset-foot { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .reset-foot > div { padding: 18px 20px; border-radius: var(--r-card); background: var(--surface); backdrop-filter: blur(20px); border: 1px solid var(--edge); }
 
@@ -533,6 +530,3 @@ button.row-item:hover .row-aside .icon { transform: translateX(3px); }
 .view [style*="--i"] .range-mark { animation: pop 700ms var(--spring) both 700ms; }
 @keyframes pop { from { opacity: 0; transform: translateY(-50%) scale(0.2); } to { opacity: 1; transform: translateY(-50%) scale(1); } }
 .row-title .dot { margin-right: 6px; vertical-align: middle; }
-.ci-stage { position: relative; height: 300px; }
-.ci-stage .orb { position: absolute; inset: 0; }
-.ci-stage .reset-canvas { position: absolute; left: 0; right: 0; top: 50%; height: 140px; transform: translateY(-50%); opacity: 0.5; }

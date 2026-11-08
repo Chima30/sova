@@ -269,4 +269,4 @@ class BreathOrb {
   }
 }
 
-module.exports = { BreathOrb };
+module.exports = { BreathOrb, themeColours };
