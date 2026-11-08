@@ -11,6 +11,8 @@ const { checkUsable, HIDDEN_REASON_TEXT } = require('../../shared/core/signals')
 const ci = require('../../shared/core/checkIns');
 const { BreathLines, levelFromTrace } = require('./breathLines');
 const { icon } = require('./icons');
+const { createMachine } = require('../../shared/core/machine');
+const { CHECK_IN } = require('../../shared/core/machines');
 
 const SECONDS = 60;            // the check-in itself
 const HRV_EXTRA = 30;          // HRV needs a full minute of steady signal: wait up to 30 s more
@@ -42,8 +44,9 @@ class CheckIn {
     this.faceSeen = 0;
     this.faceVisible = null;
     this.validation = null;
-    this.phase = 'prep';
-    this.done = false;
+    // prep -> starting -> measuring -> (extending) -> finishing -> results,
+    // or failed / cancelled. See shared/core/machines.js.
+    this.machine = createMachine(CHECK_IN);
     this.measurement = createMeasurement({
       apiKey,
       telemetry: settings.telemetry,
@@ -80,12 +83,15 @@ class CheckIn {
     this.preview = null;
   }
 
+  get state() { return this.machine.state; }
+
   async start() {
+    if (!this.machine.send('START')) return;   // a second click does nothing
     this.closePreview();
-    this.phase = 'measuring';
     this.renderMeasuring();
     announce('Check-in started. Breathe normally and stay still.');
     await new Promise((r) => setTimeout(r, 400));   // let the camera driver release
+    if (!this.machine.is('starting')) return;       // cancelled meanwhile
     try {
       await this.measurement.start();
     } catch (e) {
@@ -93,6 +99,12 @@ class CheckIn {
       this.fail(e && e.message ? e.message : "Couldn't start the camera.");
       return;
     }
+    this.beginTicking();
+  }
+
+  // starting -> measuring, once the SDK has the camera (first try or a retry).
+  beginTicking() {
+    if (!this.machine.is('starting') || !this.machine.send('RUNNING')) return;
     this.timer = setInterval(() => this.tick(), 250);
   }
 
@@ -111,15 +123,13 @@ class CheckIn {
 
   // Leaving the screen ends the check-in and turns the camera off.
   async cancel(silent = false) {
-    if (this.done) return;
-    this.done = true;
+    if (!this.machine.send('CANCEL')) return;
     await this.shutdown();
     if (!silent) this.onFinish({ action: 'cancel' });
   }
 
   async fail(text) {
-    if (this.done) return;
-    this.done = true;
+    if (!this.machine.send('FAIL')) return;
     await this.shutdown();
     $('#view').innerHTML = `
       <div class="stack-24" style="max-width: 640px; margin: 6vh auto 0">
@@ -144,7 +154,7 @@ class CheckIn {
   }
 
   onReading(r, elapsed) {
-    if (this.phase !== 'measuring') return;
+    if (!this.machine.is('measuring', 'extending')) return;
     const t = now();
     for (const kind of ci.KINDS) {
       const check = checkUsable(kind, r[kind], elapsed, this.config.signals);
@@ -166,7 +176,10 @@ class CheckIn {
     if (e.retryable && this.measurement && !this.retried) {
       this.retried = true;
       toast({ title: 'Reconnecting live readings', body: 'Presage did not respond straight away. Trying again.' });
-      setTimeout(() => this.measurement && this.measurement.restart(false).catch((err) => this.fail(err.message)), 3000);
+      setTimeout(() => {
+        if (!this.measurement || this.machine.final) return;
+        this.measurement.restart(false).then(() => this.beginTicking()).catch((err) => this.fail(err.message));
+      }, 3000);
       return;
     }
     this.fail(e.text || e.message || 'Live readings stopped.');
@@ -180,7 +193,7 @@ class CheckIn {
   }
 
   tick() {
-    if (this.done || !this.measurement) return;
+    if (!this.machine.is('measuring', 'extending') || !this.measurement) return;
     const elapsed = this.measurement.elapsed();
     if (elapsed > 0) {
       this.faceTicks += 1;
@@ -192,14 +205,13 @@ class CheckIn {
     if (elapsed >= SECONDS) {
       const waitHrv = !enough('hrv') && (enough('breathing') || enough('pulse')) && this.faceVisible !== false && elapsed < SECONDS + HRV_EXTRA;
       if (!waitHrv || this.skipExtra) return this.finish(elapsed);
-      this.extending = true;
+      if (this.machine.is('measuring')) this.machine.send('EXTEND');
     }
     this.renderLive(elapsed);
   }
 
   async finish(elapsed) {
-    if (this.done) return;
-    this.done = true;
+    if (!this.machine.send('FINISH')) return;
     const values = ci.summarize(this.samples, MIN_SAMPLES);
     const quality = {};
     for (const k of ci.KINDS) quality[k] = this.samples[k].length >= MIN_SAMPLES ? 'ok' : (this.hidden[k] || 'no-reading');
@@ -214,6 +226,7 @@ class CheckIn {
       feeling: null,
     };
     await this.shutdown();
+    this.machine.send('DONE');
     announce('Check-in complete');
     this.onFinish({ action: 'results', record });
   }
@@ -278,11 +291,11 @@ class CheckIn {
     const clock = $('#ci-clock');
     if (!clock) return;
     const running = elapsed > 0;
-    const left = this.extending ? SECONDS + HRV_EXTRA - elapsed : SECONDS - elapsed;
+    const left = this.machine.is('extending') ? SECONDS + HRV_EXTRA - elapsed : SECONDS - elapsed;
     clock.textContent = fmtClock(running ? left : SECONDS);
-    $('#ci-phase').textContent = !running ? 'Starting the camera' : this.extending ? 'Waiting for HRV' : 'Measuring';
+    $('#ci-phase').textContent = !running ? 'Starting the camera' : this.machine.is('extending') ? 'Waiting for HRV' : 'Measuring';
     $('#ci-bar').style.width = `${Math.min(100, (elapsed / SECONDS) * 100)}%`;
-    $('#ci-extra').hidden = !this.extending;
+    $('#ci-extra').hidden = !this.machine.is('extending');
     const breathing = this.fresh('breathing') != null;
     this.lines.setLive(breathing ? levelFromTrace(this.trace) : null);
 

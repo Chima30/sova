@@ -142,6 +142,10 @@ function cleanupView() {
 }
 
 function go(view) {
+  if (state.session && state.session.lifecycle.is('ending')) {
+    toast({ title: 'Finishing your session', body: 'Skip the AI reflection to move on now.' });
+    return;
+  }
   const s = liveSession();
   if (s && s.phaseUi === 'check' && view !== 'home' && view !== 'focus') {
     toast({ title: 'Finish the signal check first', body: 'Start the session or cancel the check, then the other sections open.', actions: [{ label: 'OK' }] });
@@ -199,6 +203,11 @@ function updateTopbar() {
     return;
   }
   const off = !navigator.onLine;
+  if (state.session && state.session.lifecycle.is('ending')) {
+    const h = '<span class="status t-small"><span class="dot live"></span>Finishing session</span>';
+    if (box.dataset.html !== h) { box.innerHTML = h; box.dataset.html = h; }
+    return;
+  }
   if (state.view === 'checkin') {
     const h = '<span class="status t-small"><span class="dot live"></span>Camera on · check-in</span>';
     if (box.dataset.html !== h) { box.innerHTML = h; box.dataset.html = h; }
@@ -477,6 +486,7 @@ async function startCheckIn() {
   enterView();
   const apiKey = await window.sova.getApiKey();
   const c = new CheckIn({ config: state.config, settings: state.settings, apiKey, reducedMotion: reducedMotion(), onFinish: onCheckInFinish });
+  state.checkIn = c;
   state.cleanup = () => c.cancel(true);
   updateTopbar();
   await c.begin();
@@ -1328,6 +1338,17 @@ const VIEWS = {
     $('#consent').addEventListener('click', reviewConsent);
   },
 };
+
+// Read-only snapshot of where the app is, for debugging and for tests and
+// agents (window.sovaState() in DevTools). Holds no readings or personal data.
+window.sovaState = () => ({
+  view: state.view,
+  theme: document.documentElement.dataset.theme,
+  onboarding: state.ob ? state.ob.steps[state.ob.i] : null,
+  session: state.session ? state.session.snapshot() : null,
+  checkIn: state.checkIn ? state.checkIn.state : null,
+  overlayOpen: !$('#overlay').hidden,
+});
 
 boot().catch((e) => {
   console.error('[SOVA] boot failed', e);

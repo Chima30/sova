@@ -62,6 +62,15 @@ app.whenReady().then(async () => {
   await wait(2500);
   const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('index.html'));
   const run = (js) => win.webContents.executeJavaScript(js).catch((e) => { throw new Error(`${e.message} in: ${js.slice(0, 120)}`); });
+  // Wait for the app to reach a state (window.sovaState), not a fixed delay.
+  const until = async (expr, label, timeout = 8000) => {
+    const t0 = Date.now();
+    while (Date.now() - t0 < timeout) {
+      if (await run(`(() => { const s = window.sovaState(); return !!(${expr}); })()`)) return true;
+      await wait(100);
+    }
+    throw new Error(`timed out waiting for ${label}: ${JSON.stringify(await run('window.sovaState()'))}`);
+  };
   const report = {};
   const shots = process.env.SOVA_SMOKE_SHOTS;
   const shot = async (w, name) => { if (shots) fs.writeFileSync(path.join(shots, name), (await w.webContents.capturePage()).toPNG()); };
@@ -109,7 +118,9 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('[data-nav="focus"]').click()`);
     await wait(300);
     await run(`document.getElementById('f-start').click()`);
-    await wait(2500);
+    await until(`s.session && s.session.lifecycle === 'running'`, 'session running');
+    report.sessionState = await run('JSON.stringify(window.sovaState().session)');
+    await wait(1500);
     report.session = await run(`document.querySelector('#view h1').textContent + ' | ' + (document.querySelector('#view .notice') ? document.querySelector('#view .notice').innerText : '')`);
     await shot(win, 'session.png');
     report.widgetOpen = BrowserWindow.getAllWindows().some((w) => w.webContents.getURL().includes('widget.html'));
@@ -126,12 +137,12 @@ app.whenReady().then(async () => {
     await wait(300);
 
     // End session -> reflection -> summary with timeline.
-    await run(`document.getElementById('end').click()`);
-    await wait(800);
+    // A double click on End must not end twice.
+    await run(`document.getElementById('end').click(); const e2 = document.getElementById('end'); if (e2) e2.click()`);
+    await until(`s.view === 'reflection'`, 'reflection screen');
     await run(`document.querySelector('[data-tag="Productive"]').click(); document.getElementById('note').value = 'smoke'; document.getElementById('save').click()`);
-    await wait(800);
+    await until(`s.view === 'summary' && !s.session`, 'summary screen');
     await shot(win, 'summary.png');
-    await wait(400);
     report.summaryFeeling = await run(`(document.querySelector('#view .page-head .t-small') || {}).textContent || 'missing'`);
     report.summary = await run(`document.querySelector('#view h1').textContent + ' | timeline: ' + !!document.querySelector('#view [role=img]')`);
     report.widgetClosed = !BrowserWindow.getAllWindows().some((w) => w.webContents.getURL().includes('widget.html'));

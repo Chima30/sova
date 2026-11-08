@@ -34,11 +34,13 @@ app.whenReady().then(async () => {
     await wait(1500);
     report.prep = await run(`document.querySelector('#view h1').textContent + ' | topbar: ' + document.getElementById('tb-status').innerText`);
     await shot('checkin-prep.png');
-    await run(`document.getElementById('ci-start').disabled = false; document.getElementById('ci-start').click()`);
+    // Double click: the machine accepts the first START only.
+    await run(`const b = document.getElementById('ci-start'); b.disabled = false; b.click(); const b2 = document.getElementById('ci-start'); if (b2) b2.click()`);
     await wait(1200);
     report.measuring = await run(`document.querySelector('#view h1').textContent + ' | ' + (document.getElementById('ci-signals') || {}).innerText`);
     await shot('checkin-measuring.png');
     await wait(9000);
+    report.machine = await run(`window.sovaState().checkIn`);
     report.after = await run(`document.querySelector('#view h1').textContent + ' | ' + (document.querySelector('#view .t-body') || {}).textContent`);
     await shot('checkin-after.png');
     await run(`(document.getElementById('ci-back') || document.querySelector('[data-nav="home"]')).click()`);

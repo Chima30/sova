@@ -17,6 +17,8 @@ const { renderTimeline } = require('./timeline');
 const { applyOverrides } = require('../../shared/core/overrides');
 const audio = require('./audio');
 const { buildPrompt } = require('../../shared/core/aiPrompt');
+const { createMachine } = require('../../shared/core/machine');
+const { SESSION, SIGNAL } = require('../../shared/core/machines');
 
 const AI_LABEL = 'Written by Presage AI from your measured pulse, HRV and breathing. AI can be wrong. Not medical advice.';
 
@@ -45,7 +47,12 @@ class LiveSession {
     this.checkIn = checkIn;   // how you said you felt on Home, if recent
     this.startedAtIso = new Date().toISOString();
     this.id = `s_${Date.now().toString(36)}`;
-    this.mode = apiKey && navigator.onLine ? 'live' : 'timer';
+    // Two explicit state machines (see shared/core/machines.js):
+    //   lifecycle: check -> running -> ending -> ended
+    //   signal:    live <-> restarting, -> timer (final)
+    this.lifecycle = createMachine(SESSION);
+    this.signal = createMachine(SIGNAL);
+    if (!(apiKey && navigator.onLine)) this.signal.send('FALLBACK');
     this.modeReason = !apiKey ? 'Add your Presage API key in Settings for live readings.' : (!navigator.onLine ? 'You are offline, so live readings are off.' : '');
 
     const sens = settings.sensitivity || preset.sensitivity;
@@ -69,8 +76,7 @@ class LiveSession {
     this.validation = null;
     this.faceVisible = true;     // validation events arrive on change only
     this.metricsCount = 0;
-    this.ended = false;
-    this.phaseUi = this.mode === 'live' ? 'check' : 'running';
+    if (this.mode === 'timer') this.lifecycle.send('START');   // no signal check without live readings
 
     this.measurement = this.mode === 'live' ? createMeasurement({
       apiKey,
@@ -86,6 +92,32 @@ class LiveSession {
       },
     }) : null;
     this.pendingAI = new Map();
+  }
+
+  // ---- state, read by the rest of the app --------------------------------
+
+  get mode() { return this.signal.is('timer') ? 'timer' : 'live'; }
+  get phaseUi() { return this.lifecycle.is('check') ? 'check' : this.lifecycle.is('running') ? 'running' : 'ended'; }
+  get ended() { return this.lifecycle.is('ending', 'ended'); }
+
+  // Derived, never stored: off | waiting | learning | set | unreliable
+  baselineState() {
+    if (this.mode === 'timer') return 'off';
+    if (this.baselineResult) return this.baselineResult.reliable ? 'set' : 'unreliable';
+    return this.baselineStart == null ? 'waiting' : 'learning';
+  }
+
+  // One plain object describing where this session is, for the debug
+  // snapshot (window.sovaState) and for tests.
+  snapshot() {
+    return {
+      lifecycle: this.lifecycle.state,
+      signal: this.signal.state,
+      baseline: this.baselineState(),
+      timer: this.engine.done ? 'done' : this.engine.paused ? 'paused' : this.engine.phase,
+      cameraPaused: this.cameraPaused,
+      preset: this.preset.id,
+    };
   }
 
   // ---- shared with the reset overlay -------------------------------------
@@ -166,7 +198,7 @@ class LiveSession {
   }
 
   async startFocus() {
-    this.phaseUi = 'running';
+    if (!this.lifecycle.send('START')) return;   // already started (e.g. a double click)
     this.baselineStart = null;   // set by the first steady breathing reading
     this.log('session-start', { mode: this.mode });
     this.log('block-start', { block: 1 });
@@ -183,8 +215,7 @@ class LiveSession {
   }
 
   async fallbackToTimer(message) {
-    if (this.mode === 'timer') return;
-    this.mode = 'timer';
+    if (!this.signal.send('FALLBACK')) return;
     this.modeReason = message;
     if (this.measurement) { await this.measurement.stop(); this.measurement.destroy(); this.measurement = null; }
     if (this.phaseUi === 'check') this.startFocus(); else this.render();
@@ -228,6 +259,8 @@ class LiveSession {
     // Retryable errors (the SDK says so): restart up to 3 times, the second
     // time in the lighter camera mode, then fall back to the plain timer.
     if (e.retryable && this.measurement) {
+      this.signal.send('RESTART');
+      this.renderRunning();
       this.restarts = (this.restarts || 0) + 1;
       this.log('sdk-restart', { code: e.code, attempt: this.restarts });
       if (this.restarts > 3) return this.fallbackToTimer(e.code === 5 ? e.text : 'Live processing kept stopping on this computer. The timer keeps running.');
@@ -241,10 +274,12 @@ class LiveSession {
 
   // Restart the SDK, optionally in the 640x480 camera mode.
   async switchToLightCamera(light = true, afterError = false) {
-    if (!this.measurement || this.switchingCamera || this.ended) return;
+    if (!this.measurement || this.restartBusy || this.ended) return;
     const goLight = light && !this.measurement.lightMode;
     if (!goLight && !afterError) return;
-    this.switchingCamera = true;
+    this.restartBusy = true;   // one SDK restart at a time
+    this.signal.send('RESTART');
+    this.renderRunning();
     if (goLight) {
       this.log('camera-light-mode', { afterError });
       toast({
@@ -260,7 +295,8 @@ class LiveSession {
     } catch (err) {
       this.fallbackToTimer(`Couldn't restart live readings: ${err.message}`);
     }
-    this.switchingCamera = false;
+    this.restartBusy = false;
+    if (this.signal.is('restarting') && this.signal.send('RECOVERED')) this.renderRunning();
   }
 
   onReading(r, elapsed) {
@@ -427,6 +463,7 @@ class LiveSession {
     else if (e.phase === 'break') line = 'Break: step away from the screen';
     else if (this.mode !== 'live') line = 'Focus · timer only';
     else if (this.cameraPaused) line = 'Focus · camera paused';
+    else if (this.signal.is('restarting')) line = 'Reconnecting live readings';
     else if (snap.breathing != null) line = `Breathing ${Math.round(snap.breathing)} /min${this.cue.inMeeting(now()) ? ' · meeting' : ''}`;
     else if (snap.pulse != null) line = `Pulse ${Math.round(snap.pulse)} bpm`;
     else line = 'Waiting for a steady signal';
@@ -608,9 +645,12 @@ class LiveSession {
   }
 
   async end(completed) {
-    if (this.ended) return;
-    this.ended = true;
+    if (!this.lifecycle.send('END')) return;   // already ending
     clearInterval(this.timer);
+    // The timer has stopped, so the widget's clock would be frozen: hide it now.
+    if (this.offWidget) this.offWidget();
+    this.offWidget = null;
+    if (window.sova.widget) window.sova.widget.hide();
     let ai = null;
     if (this.aiEnabled() && this.measurement.running && this.engine.completedFocusSeconds >= 120) {
       ai = await this.waitForReflection();
@@ -642,6 +682,7 @@ class LiveSession {
       ai,
       checkIn: this.checkIn,
     };
+    this.lifecycle.send('DONE');
     this.onEnd && this.onEnd(record);
   }
 
@@ -876,16 +917,18 @@ class LiveSession {
     }
 
     this.updateBreathLines();
+    this.renderSignalState();
     if (this.mode !== 'live') { this.renderMetric('breathing', null, null, 'breaths/min', 'not-measuring'); return; }
 
     const bb = $('#baseline-banner');
-    if (!this.baselineResult && this.baselineStart == null) {
+    const bstate = this.baselineState();
+    if (bstate === 'waiting') {
       bb.innerHTML = `<div class="notice"><span class="dot warn"></span><span class="grow">Waiting for a steady signal before setting your baseline. Pulse needs about 12 seconds, breathing about 30.</span></div>`;
-    } else if (!this.baselineResult) {
+    } else if (bstate === 'learning') {
       const p = Math.min(1, (this.measurement ? this.measurement.elapsed() - this.baselineStart : 0) / this.config.baseline.durationSeconds);
       const left = Math.max(0, Math.ceil((1 - p) * this.config.baseline.durationSeconds));
       bb.innerHTML = `<div class="stack-8"><div class="row-between"><span class="t-small">Learning your baseline. Sit naturally and avoid talking</span><span class="t-meta">${formatClock(left)}</span></div><div class="progress"><div style="width: ${Math.round(p * 100)}%"></div></div></div>`;
-    } else if (!this.baselineResult.reliable) {
+    } else if (bstate === 'unreliable') {
       bb.innerHTML = `<div class="notice attention"><span class="dot warn"></span><span class="grow">SOVA couldn't set a reliable baseline, so cues are off. Check the light and your position, then recalibrate.</span><button class="btn" id="recal">${icon('rotate-ccw', 16)}<span>Recalibrate</span></button></div>`;
       $('#recal').addEventListener('click', () => this.recalibrate());
     } else {
@@ -918,6 +961,21 @@ class LiveSession {
     if (camText) camText.textContent = this.cameraPaused ? 'Camera paused' : 'Camera on';
     const camDot = $('#cam-dot');
     if (camDot) camDot.className = `dot ${this.cameraPaused ? 'warn' : 'live'}`;
+  }
+
+  // The status line follows the signal machine: while the SDK restarts it
+  // says so; afterwards it goes back to the latest validation tip.
+  renderSignalState() {
+    const tipEl = $('#quality-tip');
+    const dot = $('#quality-dot');
+    if (!tipEl || !dot) return;
+    if (this.signal.is('restarting')) {
+      tipEl.textContent = 'Reconnecting live readings';
+      dot.className = 'dot warn';
+    } else if (this.signal.is('live') && tipEl.textContent === 'Reconnecting live readings') {
+      tipEl.textContent = this.validation ? this.validation.tip : 'Waiting for the camera';
+      dot.className = `dot ${this.validation && this.validation.ok ? 'live' : 'warn'}`;
+    }
   }
 
   renderMetric(kind, value, base, unit, forceReason) {

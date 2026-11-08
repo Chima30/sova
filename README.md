@@ -200,6 +200,10 @@ SOVA calls the SDK's `requestInsight` only when the user has turned on AI reflec
 - SOVA is a focus and self-reflection tool. It makes no diagnosis or treatment claims, shows no stress score, and is not for medical decisions. Presage states its SDK metrics are for general wellness only and are not FDA-cleared.
 - Readings can be wrong during large motion, chewing gum, flickering light, talking (breathing), dark or striped clothing (breathing), or with the face turned away. SOVA hides any value whose confidence is too low instead of showing it.
 
+## For contributors
+
+See [AGENTS.md](AGENTS.md) for commands and rules, and [docs/state-machines.md](docs/state-machines.md) for every stateful flow (session, live signal, check-in) with diagrams.
+
 ## Project layout
 
 ```
