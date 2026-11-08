@@ -12,6 +12,8 @@ const audio = require('./audio');
 const { cleanOverrides, LIMITS } = require('../../shared/core/overrides');
 const { allResets, exhaleTrend } = require('../../shared/core/breathHistory');
 const { BreathLines, mark } = require('./breathLines');
+const { BreathOrb } = require('./breathOrb');
+const motion = require('./motion');
 const { icon } = require('./icons');
 const { formatClock } = require('../../shared/core/sessionEngine');
 const { CheckIn, renderResults } = require('./checkin');
@@ -74,8 +76,12 @@ async function boot() {
   const info = await window.sova.appInfo();
   state.mod = info.platform === 'darwin' ? 'Cmd' : 'Ctrl';
 
-  $('#brand').innerHTML = `<span class="brand-mark">${mark(24)}</span><span class="brand-word">SOVA</span>`;
-  $('#nav').innerHTML = NAV.map(([id, label, ic]) => `<button class="nav-item" data-nav="${id}" aria-current="false">${icon(ic, 16)}<span class="label">${label}</span></button>`).join('');
+  $('#brand').innerHTML = `<span class="brand-mark">${mark(28)}</span><span class="brand-word">SOVA</span>`;
+  $('#nav').innerHTML = '<span class="rail-indicator" aria-hidden="true"></span>'
+    + NAV.map(([id, label, ic]) => `<button class="nav-item" data-nav="${id}" aria-current="false">${icon(ic, 20)}<span class="label">${label}</span></button>`).join('');
+  motion.watch($('#view'));
+  motion.watch($('#overlay'));
+  window.addEventListener('resize', () => motion.moveIndicator($('#nav')));
   $$('[data-nav]').forEach((b) => b.addEventListener('click', () => go(b.dataset.nav)));
   window.sova.onQuickReset(() => quickReset());
   window.addEventListener('online', updateTopbar);
@@ -92,17 +98,17 @@ async function boot() {
   }, 1400);
 }
 
-// The splash ribbon breathes once while SOVA loads.
+// The splash orb forms and takes one guided breath while SOVA loads.
 function splashLines() {
-  const lines = new BreathLines($('#splash-lines'), { lines: 22, reduced: reducedMotion() });
+  const orb = new BreathOrb($('#splash-orb'), { reduced: reducedMotion(), size: 0.3 });
   const t0 = performance.now();
-  lines.setGuide(0.2);
-  lines.start();
+  orb.setGuide(0.1);
+  orb.start();
   const timer = setInterval(() => {
     const t = (performance.now() - t0) / 1000;
-    lines.setGuide(reducedMotion() ? 0.6 : 0.2 + 0.7 * Math.sin(Math.min(1, t / 1.3) * Math.PI / 2));
+    orb.setGuide(reducedMotion() ? 0.6 : 0.1 + 0.8 * Math.sin(Math.min(1, t / 1.3) * Math.PI / 2));
   }, 50);
-  return { stop: () => { clearInterval(timer); lines.stop(); } };
+  return { stop: () => { clearInterval(timer); orb.stop(); } };
 }
 
 function reducedMotion() {
@@ -127,6 +133,7 @@ function liveSession() {
 
 function setCurrent(view) {
   $$('[data-nav]').forEach((b) => b.setAttribute('aria-current', b.dataset.nav === view ? 'page' : 'false'));
+  motion.moveIndicator($('#nav'));
 }
 
 function enterView() {
@@ -167,6 +174,7 @@ function go(view) {
 }
 
 function setNavVisible(on) {
+  $('#app').classList.toggle('no-nav', !on);
   $('#nav').hidden = !on;
   $('#topbar-right').hidden = !on;
 }
@@ -204,7 +212,7 @@ function updateTopbar() {
   }
   const off = !navigator.onLine;
   if (state.session && state.session.lifecycle.is('ending')) {
-    const h = '<span class="status t-small"><span class="dot live"></span>Finishing session</span>';
+    const h = '<span class="status t-small"><span class="dot guide"></span>Finishing session</span>';
     if (box.dataset.html !== h) { box.innerHTML = h; box.dataset.html = h; }
     return;
   }
@@ -228,6 +236,11 @@ function pageHead(title, sub, right = '') {
 
 function stat(label, value, note = '') {
   return `<div class="stat"><span class="stat-label">${esc(label)}</span><span class="t-figure">${value}</span>${note ? `<span class="stat-note">${note}</span>` : ''}</div>`;
+}
+
+// A count (not a reading) that counts up when the section opens.
+function count(n) {
+  return `<span data-count="${Number(n) || 0}">${Number(n) || 0}</span>`;
 }
 
 function empty(text, actionHtml = '') {
@@ -465,6 +478,22 @@ function checkSummary(c) {
   if (v.pulse != null) bits.push(`${Math.round(v.pulse)} bpm`);
   if (v.hrv != null) bits.push(`${Math.round(v.hrv)} ms HRV`);
   return bits.length ? bits.join(' · ') : 'no steady readings';
+}
+
+// A stored check-in's readings as [label, value, unit]. Only the values that
+// passed the signal checks were stored, so only those appear.
+function lastValues(c) {
+  const v = c.values || {};
+  return [['Breathing', v.breathing, 'breaths/min'], ['Pulse', v.pulse, 'bpm'], ['HRV', v.hrv, 'ms']]
+    .filter(([, x]) => x != null)
+    .map(([l, x, u]) => [l, Math.round(x), u]);
+}
+
+// Focus time as a big figure: minutes, or hours and minutes. Counts up.
+function focusFigure(seconds) {
+  const m = Math.round((seconds || 0) / 60);
+  if (m < 60) return `<div class="tile-figure"><span class="value" data-count="${m}">${m}</span><span class="unit">min</span></div>`;
+  return `<div class="tile-figure"><span class="value" data-count="${Math.floor(m / 60)}">${Math.floor(m / 60)}</span><span class="unit">h</span><span class="value" data-count="${m % 60}">${m % 60}</span><span class="unit">min</span></div>`;
 }
 
 async function startCheckIn() {
@@ -736,55 +765,58 @@ const VIEWS = {
         ${!cameraAllowed() ? `<div class="notice"><span class="dot off"></span><span class="grow">Camera consent not given, so sessions run as plain timers.</span><button class="btn" id="give-consent">Review consent</button></div>` : ''}
         ${cameraAllowed() && !s.hasApiKey ? `<div class="notice attention"><span class="dot warn"></span><span class="grow">Add your Presage API key to turn on live readings.</span><button class="btn" id="to-settings">Open Settings</button></div>` : ''}
         ${!navigator.onLine ? '<div class="notice"><span class="dot warn"></span><span class="grow">Offline: timers, recovery and history still work. Live readings return when you reconnect.</span></div>' : ''}
-        <div class="entry">
-          <section class="panel hero hero-check">
-            <canvas class="hero-lines" id="check-lines" aria-hidden="true"></canvas>
-            <div class="hero-body stack-24">
-              <div class="stack-8"><span class="t-small">About 60 seconds · no session</span><h2 class="t-display">Check your signals</h2>
+        <div class="bento">
+          <section class="panel orb-card" aria-labelledby="h-check-title">
+            <div class="stack-24">
+              <div class="stack-8"><span class="t-small">About 60 seconds · no session</span><h2 class="t-display" id="h-check-title">Check your signals</h2>
                 <span class="t-body t-2">A quick look at your breathing, pulse and HRV, next to your own history.</span></div>
-              <span class="t-small" id="last-check">${lastCheck ? `Last check-in ${esc(fmtDate(lastCheck.at))}: ${esc(checkSummary(lastCheck))}` : 'No check-ins yet'}</span>
+              ${lastCheck && lastValues(lastCheck).length
+                ? `<div class="stack-8"><span class="t-small" id="last-check">Last check-in · ${esc(fmtDate(lastCheck.at))}</span>
+                    <div class="last-check">${lastValues(lastCheck).map(([label, v, unit]) => `<div class="metric"><span class="metric-label">${label}</span><div class="metric-figure"><span class="value">${v}</span><span class="unit">${unit}</span></div></div>`).join('')}</div></div>`
+                : `<span class="t-small" id="last-check">${lastCheck ? `Last check-in ${esc(fmtDate(lastCheck.at))}: ${esc(checkSummary(lastCheck))}` : 'No check-ins yet'}</span>`}
               <div class="row"><button class="btn btn-accent btn-lg" id="h-check">${icon('activity', 18)}Start 60-second check-in</button></div>
             </div>
-          </section>
-          <section class="panel hero">
-            <canvas class="hero-lines" id="home-lines" aria-hidden="true"></canvas>
-            <div class="hero-body stack-24">
-              <div class="stack-8"><span class="t-small">Next session · ${esc(presetMeta(preset))}</span><h2 class="t-display">${esc(preset.name)}</h2>
-                <span class="t-body t-2">${cameraAllowed() && s.hasApiKey ? 'A short signal check runs first, then SOVA learns your baseline for 2 minutes.' : 'Runs as a plain timer with time-based eye-rest reminders.'}</span></div>
-              <div style="max-width: 420px">${planBar(preset)}</div>
-              <div class="row">
-                <button class="btn btn-primary btn-lg" id="h-start">${icon('play', 18)}Start ${esc(preset.name)}</button>
-                <button class="btn btn-quiet btn-lg" id="h-change">Change preset</button>
-              </div>
+            <div class="orb-wrap" aria-hidden="true">
+              <canvas class="orb" id="home-orb"></canvas>
+              <span class="orb-tag a"><span class="dot" style="background: var(--lavender)"></span><span><strong>Breathing guide</strong> · preview</span></span>
+              <span class="orb-tag b">${icon('camera-off', 14)}<span>Not measuring</span></span>
             </div>
           </section>
-        </div>
-        <div class="split-r">
-          <section class="panel stack">
-            <div class="panel-head" style="margin-bottom: 0"><h2 class="t-section">What's going on?</h2><button class="btn btn-text" id="h-more">More in Recovery</button></div>
-            <div class="sit-grid">${situationRows(true)}</div>
-          </section>
-          <section class="panel">
-            <div class="panel-head"><h2 class="t-section">Today</h2><span class="t-meta">${today.length} session${today.length === 1 ? '' : 's'}</span></div>
-            <div class="rows">
-              <div class="row-item"><span class="row-title" style="font-weight: 400">Focus time</span><span class="row-aside t-figure" style="font-size: 22px">${esc(fmtMinutes(focusToday))}</span></div>
-              <div class="row-item"><span class="row-title" style="font-weight: 400">Breathing resets</span><span class="row-aside t-figure" style="font-size: 22px">${resetsToday}</span></div>
-              <div class="row-item"><span class="row-title" style="font-weight: 400">Eye rests</span><span class="row-aside t-figure" style="font-size: 22px">${eyesToday}</span></div>
-              <div class="row-item"><span class="row-title" style="font-weight: 400">Check-ins</span><span class="row-aside t-figure" style="font-size: 22px">${checksToday}</span></div>
+          <div class="bento-side">
+            <section class="panel next-card">
+              <div class="row-between"><span class="t-small">Next session</span><button class="btn btn-text" id="h-change">Change ${icon('chevron-right', 16)}</button></div>
+              <div class="stack-8"><h2 class="t-title">${esc(preset.name)}</h2><span class="t-small">${esc(presetMeta(preset))}</span></div>
+              ${planBar(preset)}
+              <span class="t-small">${cameraAllowed() && s.hasApiKey ? 'A short signal check runs first, then SOVA learns your baseline for 2 minutes.' : 'Runs as a plain timer with time-based eye-rest reminders.'}</span>
+              <div class="row"><button class="btn btn-primary btn-lg" id="h-start">${icon('play', 18)}Start ${esc(preset.name)}</button></div>
+            </section>
+            <div class="tiles" aria-label="Today">
+              <div class="tile dark"><span class="tile-label">Focus today ${icon('timer', 16)}</span>${focusFigure(focusToday)}</div>
+              <div class="tile"><span class="tile-label">Resets ${icon('wind', 16)}</span><div class="tile-figure"><span class="value" data-count="${resetsToday}">${resetsToday}</span></div></div>
+              <div class="tile"><span class="tile-label">Eye rests ${icon('eye', 16)}</span><div class="tile-figure"><span class="value" data-count="${eyesToday}">${eyesToday}</span></div></div>
+              <div class="tile"><span class="tile-label">Check-ins ${icon('activity', 16)}</span><div class="tile-figure"><span class="value" data-count="${checksToday}">${checksToday}</span><span class="unit">${today.length} session${today.length === 1 ? '' : 's'}</span></div></div>
             </div>
-          </section>
+          </div>
         </div>
+        <section class="panel stack">
+          <div class="panel-head" style="margin-bottom: 0"><h2 class="t-section">What's going on?</h2><button class="btn btn-text" id="h-more">More in Recovery ${icon('chevron-right', 16)}</button></div>
+          <div class="sit-grid">${situationRows(true)}</div>
+        </section>
         <section class="panel">
           <div class="panel-head"><h2 class="t-section">Last session</h2>${last ? `<span class="t-meta">${esc(fmtDate(last.startedAt))} · ${esc(last.presetName)} · ${esc(fmtMinutes(last.focusSeconds))}</span>` : ''}</div>
           ${last ? renderTimeline(last, { compact: true }) : empty('No sessions yet. Your first session timeline will appear here.')}
         </section>
       </div>`;
-    const lines = new BreathLines($('#home-lines'), { lines: 30, reduced: true });
-    const lines2 = new BreathLines($('#check-lines'), { lines: 30, reduced: true });
-    const redraw = () => { lines.draw(); lines2.draw(); };
-    redraw();
-    window.addEventListener('resize', redraw);
-    state.cleanup = () => window.removeEventListener('resize', redraw);
+    // The orb previews a calm guided breath in lavender. Nothing is measured
+    // here, so it never turns orange on Home.
+    const orb = new BreathOrb($('#home-orb'), { reduced: reducedMotion() });
+    const pattern = currentPattern();
+    const orbStart = performance.now();
+    const breathe = () => orb.setGuide(reducedMotion() ? 0.5 : guideAt(pattern, (performance.now() - orbStart) / 1000).scale);
+    breathe();
+    orb.start();
+    const timer = setInterval(breathe, 50);
+    state.cleanup = () => { clearInterval(timer); orb.stop(); };
     $('#h-start').addEventListener('click', startSession);
     $('#h-check').addEventListener('click', startCheckIn);
     $('#h-change').addEventListener('click', () => go('focus'));
@@ -795,7 +827,7 @@ const VIEWS = {
       const box = $('#feel-reply');
       if (!box) return;
       if (!r) { box.innerHTML = ''; return; }
-      box.innerHTML = `<div class="notice"><span class="dot live"></span><span class="grow">${esc(r.text)}</span>${r.situation ? `<button class="btn" id="feel-go">${esc(r.action)}</button>` : ''}</div>`;
+      box.innerHTML = `<div class="notice"><span class="dot guide"></span><span class="grow">${esc(r.text)}</span>${r.situation ? `<button class="btn" id="feel-go">${esc(r.action)}</button>` : ''}</div>`;
       const g = $('#feel-go'); if (g) g.addEventListener('click', () => startSituation(r.situation));
     };
     if (check) reply(check.feeling);
@@ -827,7 +859,7 @@ const VIEWS = {
           <div class="stack-8"><span class="t-small">Selected preset</span><h2 class="t-title">${esc(sel.name)}</h2></div>
           <div class="row" style="align-items: baseline; gap: 8px"><span class="t-display">${sel.blocks * sel.focusMinutes}</span><span class="t-body t-2">minutes of focus</span></div>
           ${planBar(sel)}
-          <div class="legend"><span><span class="sw" style="background: var(--accent)"></span>Focus</span><span><span class="sw" style="background: var(--lavender)"></span>Break</span></div>
+          <div class="legend"><span><span class="sw" style="background: var(--text)"></span>Focus</span><span><span class="sw" style="background: var(--lavender)"></span>Break</span></div>
           <div class="rows">
             <div class="row-item"><span class="row-title" style="font-weight: 400">Focus blocks</span><span class="row-aside t-meta">${sel.blocks} × ${sel.focusMinutes} min</span></div>
             <div class="row-item"><span class="row-title" style="font-weight: 400">Breaks ${tip('tip-adapt', 'A little longer after a tense block, a little shorter after a calm one.')}</span><span class="row-aside t-meta">${sel.breakMinutes} min, adaptive</span></div>
@@ -860,7 +892,7 @@ const VIEWS = {
     const dur = (d) => `${Math.floor(d / 60)}:${String(d % 60).padStart(2, '0')}`;
     const L = cfg.resetLengthSeconds;
     $('#view').innerHTML = `
-      ${pageHead('Recovery', 'Guided breathing and eye rests. During a focus session, resets also show your own breath in teal.')}
+      ${pageHead('Recovery', 'Guided breathing and eye rests. During a focus session, resets also show your own breath in orange.')}
       <div class="split-r" style="align-items: start">
         <div class="stack-24">
         <section class="panel stack-24">
@@ -868,7 +900,7 @@ const VIEWS = {
             <div class="stack-8"><span class="t-small">Preview</span><span class="t-title" id="rec-phase">Breathe in</span></div>
             <span class="t-meta" id="rec-pat">${esc(patternMeta(pattern))}</span>
           </div>
-          <canvas class="reset-canvas" id="rec-lines" style="height: 260px" aria-hidden="true"></canvas>
+          <div class="reset-stage" style="height: 300px" aria-hidden="true"><canvas class="reset-canvas" id="rec-lines"></canvas><canvas class="orb" id="rec-orb"></canvas></div>
           <div class="row-between">
             <div class="stepper" role="group" aria-label="Reset length">
               <span class="t-small">Duration</span>
@@ -912,19 +944,22 @@ const VIEWS = {
 
     // Lavender preview of the chosen pattern; still in reduced motion.
     const lines = new BreathLines($('#rec-lines'), { lines: 28, reduced: reducedMotion() });
+    const orb = new BreathOrb($('#rec-orb'), { reduced: reducedMotion(), size: 0.36 });
     lines.start();
+    orb.start();
     const t0 = performance.now();
     let lastPhase = null;
     const tick = () => {
       const p = currentPattern();
-      if (reducedMotion()) { lines.setGuide(0.6); $('#rec-phase').textContent = 'Preview'; return; }
+      if (reducedMotion()) { lines.setGuide(0.6); orb.setGuide(0.6); $('#rec-phase').textContent = 'Preview'; return; }
       const g = guideAt(p, (performance.now() - t0) / 1000);
       lines.setGuide(g.scale);
+      orb.setGuide(g.scale);
       if (g.phase !== lastPhase) { lastPhase = g.phase; $('#rec-phase').textContent = PHASE_TEXT[g.phase]; }
     };
     tick();
     const timer = setInterval(tick, 50);
-    state.cleanup = () => { clearInterval(timer); lines.stop(); };
+    state.cleanup = () => { clearInterval(timer); lines.stop(); orb.stop(); };
 
     const setDur = (v) => {
       state.resetSeconds = Math.max(L.min, Math.min(L.max, v));
@@ -974,9 +1009,9 @@ const VIEWS = {
       <div class="stack-24">
         <div class="grid-4">
           ${stat('Focus this week', esc(fmtMinutes(w.focusMinutes * 60)), `${w.blocksFinished} blocks finished`)}
-          ${stat('Sessions', w.sessions, 'last 7 days')}
-          ${stat('Breaks taken', `${w.breaksTaken}${w.breaksStarted ? ` <span class="t-2" style="font-size: 15px">of ${w.breaksStarted}</span>` : ''}`, 'not skipped')}
-          ${stat('Recovery', `${w.resets} <span class="t-2" style="font-size: 15px">resets</span>`, `${w.eyeRests} eye rests`)}
+          ${stat('Sessions', count(w.sessions), 'last 7 days')}
+          ${stat('Breaks taken', `${count(w.breaksTaken)}${w.breaksStarted ? ` <span class="t-2" style="font-size: 15px">of ${w.breaksStarted}</span>` : ''}`, 'not skipped')}
+          ${stat('Recovery', `${count(w.resets)} <span class="t-2" style="font-size: 15px">resets</span>`, `${w.eyeRests} eye rests`)}
         </div>
         <div class="split-r">
           <section class="panel">

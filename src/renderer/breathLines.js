@@ -2,7 +2,7 @@
 
 // SOVA's breath lines: a ribbon of contour lines that taper at both ends.
 //
-//  live   teal lines whose height follows the real breathing waveform
+//  live   orange lines whose height follows the real breathing waveform
 //  guide  lavender lines that follow the breathing guide (resets, previews)
 //  idle   still, grey and low: there is no reliable reading to show
 //
@@ -129,7 +129,7 @@ class BreathLines {
     ctx.clearRect(0, 0, w, h);
     const now = performance.now();
     if (!this.colours || now - (this.coloursAt || 0) > 500) { this.colours = themeColours(this.canvas); this.coloursAt = now; }
-    const { live: TEAL, guide: LAVENDER, idle: GREY } = this.colours;
+    const { live: LIVE, guide: LAVENDER, idle: GREY } = this.colours;
     const hasLive = this.live != null;
     const hasGuide = this.guide != null;
     if (!hasLive && !hasGuide) {
@@ -139,8 +139,8 @@ class BreathLines {
     }
     if (hasGuide) this.ribbon(w, h, dpr, this.guideNow, LAVENDER, hasLive ? Math.round(this.lines * 0.5) : this.lines, 0.06, hasLive ? 0.35 : 0.7, 0.9);
     if (hasLive) {
-      this.glow(w, h, TEAL, this.liveNow);
-      this.ribbon(w, h, dpr, this.liveNow, TEAL, this.lines, 0.08, 0.9, 0);
+      this.glow(w, h, LIVE, this.liveNow);
+      this.ribbon(w, h, dpr, this.liveNow, LIVE, this.lines, 0.08, 0.9, 0);
     }
   }
 }

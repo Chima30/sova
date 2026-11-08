@@ -73,7 +73,12 @@ app.whenReady().then(async () => {
   };
   const report = {};
   const shots = process.env.SOVA_SMOKE_SHOTS;
-  const shot = async (w, name) => { if (shots) fs.writeFileSync(path.join(shots, name), (await w.webContents.capturePage()).toPNG()); };
+  // Screenshots wait for the entrance animations to settle.
+  const shot = async (w, name) => {
+    if (!shots) return;
+    await new Promise((r) => setTimeout(r, 1600));
+    fs.writeFileSync(path.join(shots, name), (await w.webContents.capturePage()).toPNG());
+  };
   try {
     win.setSize(1440, 900);
     // First launch: name and goals (consent was seeded).

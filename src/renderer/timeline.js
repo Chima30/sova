@@ -8,8 +8,8 @@ const { esc } = require('./dom');
 const { buildTimeline } = require('../../shared/core/insights');
 
 const C = {
-  focus: 'var(--accent)',
-  focusLive: 'var(--accent-soft)',
+  focus: 'color-mix(in srgb, var(--text) 82%, transparent)',
+  focusLive: 'color-mix(in srgb, var(--text) 28%, transparent)',
   break: 'var(--raised-2)',
   tense: 'var(--attention)',
   away: 'var(--muted)',
@@ -25,8 +25,8 @@ const STRETCH = {
 const MARK = {
   'cue-tension': 'var(--attention)',
   'cue-eye-rest': 'var(--text-2)',
-  reset: 'var(--accent)',
-  'eye-rest': 'var(--lavender)',
+  reset: 'var(--lavender)',
+  'eye-rest': 'var(--rose)',
   'flow-snooze': 'var(--muted)',
   'break-skipped': 'var(--muted)',
   recalibrate: 'var(--muted)',

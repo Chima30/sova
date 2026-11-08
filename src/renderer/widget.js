@@ -12,12 +12,12 @@
     ctx.clearRect(0, 0, c.width, c.height);
     if (!show || !points || points.length < 4) {
       // Nothing measured: a still grey line, never an invented breath.
-      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#8e89b0';
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#86839b';
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(0, c.height / 2); ctx.lineTo(c.width, c.height / 2); ctx.stroke();
       return;
     }
-    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#6fd8c6';
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ff7442';
     ctx.lineWidth = 2;
     ctx.lineJoin = 'round';
     ctx.beginPath();

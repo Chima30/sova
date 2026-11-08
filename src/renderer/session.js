@@ -12,6 +12,7 @@ const { CueEngine, inQuietHours } = require('../../shared/core/cueEngine');
 const { SessionEngine, formatClock } = require('../../shared/core/sessionEngine');
 const { openReset, openEyeRest } = require('./reset');
 const { BreathLines, levelFromTrace } = require('./breathLines');
+const { BreathOrb } = require('./breathOrb');
 const { icon } = require('./icons');
 const { renderTimeline } = require('./timeline');
 const { applyOverrides } = require('../../shared/core/overrides');
@@ -715,7 +716,9 @@ class LiveSession {
 
   stopLines() {
     if (this.lines) this.lines.stop();
+    if (this.orb) this.orb.stop();
     this.lines = null;
+    this.orb = null;
   }
 
   renderCheckShell() {
@@ -797,8 +800,9 @@ class LiveSession {
           <div class="ring">
             <svg viewBox="0 0 300 300" role="img" aria-label="Time left in this phase">
               ${ticks}
-              <circle cx="150" cy="150" r="128" style="stroke: var(--hair-2)" stroke-width="2" fill="none"/>
-              <circle class="ring-arc" id="ring-arc" cx="150" cy="150" r="128" style="stroke: var(--accent); filter: drop-shadow(0 0 6px var(--accent-soft))" stroke-width="3" fill="none" stroke-linecap="round" stroke-dasharray="${RING_C}" stroke-dashoffset="0" transform="rotate(-90 150 150)"/>
+              <circle cx="150" cy="150" r="128" style="stroke: var(--raised-2)" stroke-width="8" fill="none"/>
+              <circle class="ring-arc drawing" id="ring-arc" cx="150" cy="150" r="128" style="stroke: ${live ? 'var(--accent)' : 'var(--text)'}; --ring-c: ${RING_C}; filter: drop-shadow(0 4px 10px var(--hair-2))" stroke-width="8" fill="none" stroke-linecap="round" stroke-dasharray="${RING_C}" stroke-dashoffset="0" transform="rotate(-90 150 150)"/>
+              <g class="ring-tip" id="ring-tip" style="transform-origin: 150px 150px"><circle cx="150" cy="22" r="9" style="fill: var(--surface-solid); stroke: ${live ? 'var(--accent)' : 'var(--text)'}" stroke-width="4"/></g>
             </svg>
             <div class="ring-center"><span class="clock" id="clock" aria-live="off">--:--</span><span class="t-small" id="clock-sub"></span></div>
           </div>
@@ -818,15 +822,18 @@ class LiveSession {
         </section>
 
         <section class="panel ws-breath">
-          <div class="breath-head">
-            <div class="metric">
-              <div class="metric-label">Breathing ${tip('tip-br', 'Breaths per minute, measured by your camera from small movements of your chest. Shown only when the signal is steady.')}</div>
-              <div id="m-breathing"></div>
+          <div class="breath-stage">
+            <div class="breath-head">
+              <div class="metric">
+                <div class="metric-label">Breathing ${tip('tip-br', 'Breaths per minute, measured by your camera from small movements of your chest. Shown only when the signal is steady.')}</div>
+                <div id="m-breathing"></div>
+              </div>
+              <div class="stack-8">
+                <span class="status" id="quality"><span class="dot ${this.validation && this.validation.ok ? 'live' : 'warn'}" id="quality-dot"></span><span id="quality-tip">${esc(this.validation ? this.validation.tip : (live ? 'Waiting for the camera' : 'Not measuring'))}</span></span>
+                ${live ? '<span class="t-meta" id="breath-source"></span>' : ''}
+              </div>
             </div>
-            <div class="stack-8" style="align-items: flex-end">
-              <span class="status" id="quality"><span class="dot ${this.validation && this.validation.ok ? 'live' : 'warn'}" id="quality-dot"></span><span id="quality-tip">${esc(this.validation ? this.validation.tip : (live ? 'Waiting for the camera' : 'Not measuring'))}</span></span>
-              ${live ? '<span class="t-meta" id="breath-source"></span>' : ''}
-            </div>
+            <canvas class="orb" id="breath-orb" aria-hidden="true"></canvas>
           </div>
           <canvas class="breath-canvas" id="breath-lines" aria-hidden="true"></canvas>
           <div id="baseline-banner"></div>
@@ -861,6 +868,8 @@ class LiveSession {
     $('#eyes').addEventListener('click', () => this.startEyeRest());
     $('#skip').addEventListener('click', () => { if (this.engine.phase === 'break') this.log('break-skipped'); const tr = this.engine.skipPhase(); if (tr) this.onTransition(tr); if (this.engine.done) this.end(true); else this.renderRunning(); });
     $('#end').addEventListener('click', () => this.end(false));
+    // After the draw-in, the arc moves smoothly second by second.
+    $('#ring-arc').addEventListener('animationend', (ev) => ev.target.classList.remove('drawing'), { once: true });
     const cam = $('#cam-toggle');
     if (cam) cam.addEventListener('click', () => this.toggleCamera());
     const aiBtn = $('#ai-btn');
@@ -868,6 +877,9 @@ class LiveSession {
 
     this.lines = new BreathLines($('#breath-lines'), { reduced: this.reducedMotion() });
     this.lines.start();
+    this.orb = new BreathOrb($('#breath-orb'), { reduced: this.reducedMotion(), size: 0.36 });
+    this.orb.start();
+    this.shown = {};
     this.lastTimelineAt = 0;
     this.renderRunning();
   }
@@ -882,7 +894,15 @@ class LiveSession {
     const canvas = $('#breath-lines');
     if (!canvas || !canvas.isConnected) { this.stopLines(); return; }
     const live = this.mode === 'live' && !this.cameraPaused && this.breathingUsable();
-    this.lines.setLive(live ? levelFromTrace(this.recentTrace(12)) : null);
+    const level = live ? levelFromTrace(this.recentTrace(12)) : null;
+    this.lines.setLive(level);
+    if (this.orb) {
+      // Orange and breathing only with a usable breath; pulse rings only
+      // with a usable pulse. Otherwise the orb stays still and grey.
+      this.orb.setLive(level);
+      const pulse = this.mode === 'live' && !this.cameraPaused ? this.usableSnapshot().pulse : null;
+      this.orb.setPulse(level != null ? pulse : null);
+    }
     const src = $('#breath-source');
     if (src) src.textContent = live ? 'Live from your camera' : (this.mode === 'live' ? 'No steady breathing signal yet' : 'Not measuring');
   }
@@ -897,8 +917,14 @@ class LiveSession {
     $('#clock-sub').textContent = e.paused ? (e.pauses.has('away') ? 'Paused while you are away' : 'Paused') : (e.phase === 'focus' ? 'left in this focus block' : 'left in this break');
     $('#block-label').textContent = `${e.phase === 'focus' ? 'Focus' : 'Break'} · block ${e.block} of ${this.preset.blocks} · ${Math.floor(e.completedFocusSeconds / 60)} min focused`;
     const frac = Math.max(0, Math.min(1, e.remaining / Math.max(1, total)));
+    // Orange only while the camera is measuring; ink as a plain timer; lavender on breaks.
+    const measuring = this.mode === 'live' && !this.cameraPaused;
+    const arcColour = e.phase !== 'focus' ? 'var(--lavender)' : measuring ? 'var(--accent)' : 'var(--text)';
     $('#ring-arc').setAttribute('stroke-dashoffset', String(RING_C * (1 - frac)));
-    $('#ring-arc').style.stroke = e.phase === 'focus' ? 'var(--accent)' : 'var(--lavender)';
+    $('#ring-arc').style.stroke = arcColour;
+    const ringTip = $('#ring-tip');
+    ringTip.style.transform = `rotate(${frac * 360}deg)`;
+    ringTip.querySelector('circle').style.stroke = arcColour;
     $('#pause').innerHTML = e.pauses.has('manual') ? `${icon('play', 18)}<span>Resume</span>` : `${icon('pause', 18)}<span>Pause</span>`;
     $('#meeting').setAttribute('aria-pressed', String(this.cue.manualMeeting));
     $('#meeting').querySelector('span').textContent = this.cue.manualMeeting ? 'End meeting' : 'Meeting';
@@ -982,6 +1008,7 @@ class LiveSession {
     const el = $(`#m-${kind}`);
     if (!el) return;
     if (value == null) {
+      if (this.shown) this.shown[kind] = null;
       el.innerHTML = `<div class="metric-hidden">${esc(forceReason === 'not-measuring' ? 'Not measuring' : (HIDDEN_REASON_TEXT[this.hidden[kind]] || 'Waiting for a reading'))}</div>`;
       return;
     }
@@ -991,7 +1018,11 @@ class LiveSession {
       rel = kind === 'hrv' ? (tense ? 'Lower than your baseline' : 'Near your baseline') : (tense ? 'Higher than your baseline' : 'Near your baseline');
     }
     const relColor = !rel || rel.startsWith('Near') ? 'var(--text-2)' : 'var(--attention)';
-    el.innerHTML = `<div class="metric-figure"><span class="value">${esc(Math.round(value))}</span><span class="unit">${esc(unit)}</span></div>
+    // A changed reading slides in. It never counts through values in between.
+    const shown = Math.round(value);
+    const changed = this.shown && this.shown[kind] !== shown;
+    if (this.shown) this.shown[kind] = shown;
+    el.innerHTML = `<div class="metric-figure"><span class="value${changed ? ' roll' : ''}">${esc(shown)}</span><span class="unit">${esc(unit)}</span></div>
       ${kind === 'breathing' ? `<div class="t-small" style="color: ${relColor}">${esc(rel || 'Baseline not set yet')}${base && base.reliable ? ` · baseline ${Math.round(base.value)}` : ''}</div>` : `<div class="t-meta" style="color: ${relColor}">${base && base.reliable ? `baseline ${Math.round(base.value)}` : '&nbsp;'}</div>`}`;
   }
 }

@@ -10,6 +10,7 @@ const { createMeasurement, now } = require('./measurement');
 const { checkUsable, HIDDEN_REASON_TEXT } = require('../../shared/core/signals');
 const ci = require('../../shared/core/checkIns');
 const { BreathLines, levelFromTrace } = require('./breathLines');
+const { BreathOrb } = require('./breathOrb');
 const { icon } = require('./icons');
 const { createMachine } = require('../../shared/core/machine');
 const { CHECK_IN } = require('../../shared/core/machines');
@@ -112,7 +113,9 @@ class CheckIn {
     clearInterval(this.timer);
     this.closePreview();
     if (this.lines) this.lines.stop();
+    if (this.orb) this.orb.stop();
     this.lines = null;
+    this.orb = null;
     if (this.measurement) {
       const m = this.measurement;
       this.measurement = null;
@@ -271,7 +274,7 @@ class CheckIn {
             <div class="stack-8"><span class="t-small" id="ci-phase">Starting the camera</span><span class="clock" id="ci-clock" style="font-size: 56px">1:00</span></div>
             <span class="status"><span class="dot warn" id="ci-dot"></span><span id="ci-tip">${esc(this.validation ? this.validation.tip : 'Waiting for the camera')}</span></span>
           </div>
-          <canvas class="reset-canvas" id="ci-lines" style="height: 240px" aria-hidden="true"></canvas>
+          <div class="ci-stage" aria-hidden="true"><canvas class="reset-canvas" id="ci-lines"></canvas><canvas class="orb" id="ci-orb"></canvas></div>
           <div class="progress" aria-hidden="true"><div id="ci-bar"></div></div>
           <div class="row" id="ci-extra" hidden><span class="t-small grow">HRV needs a full minute of steady signal, so SOVA is waiting up to 30 seconds more for it.</span><button class="btn btn-quiet" id="ci-skip">Show results now</button></div>
         </section>
@@ -284,6 +287,8 @@ class CheckIn {
     $('#ci-skip').addEventListener('click', () => { this.skipExtra = true; });
     this.lines = new BreathLines($('#ci-lines'), { lines: 28, reduced: this.reduced });
     this.lines.start();
+    this.orb = new BreathOrb($('#ci-orb'), { reduced: this.reduced, size: 0.38 });
+    this.orb.start();
     this.renderLive(0);
   }
 
@@ -297,7 +302,12 @@ class CheckIn {
     $('#ci-bar').style.width = `${Math.min(100, (elapsed / SECONDS) * 100)}%`;
     $('#ci-extra').hidden = !this.machine.is('extending');
     const breathing = this.fresh('breathing') != null;
-    this.lines.setLive(breathing ? levelFromTrace(this.trace) : null);
+    const level = breathing ? levelFromTrace(this.trace) : null;
+    this.lines.setLive(level);
+    if (this.orb) {
+      this.orb.setLive(level);
+      this.orb.setPulse(level != null ? this.fresh('pulse') : null);
+    }
 
     const row = (kind) => {
       const v = this.fresh(kind);
