@@ -53,7 +53,7 @@ jobs:
           if-no-files-found: error
 
   mac:
-    runs-on: macos-14   # Apple Silicon
+    runs-on: macos-latest   # Apple Silicon
     steps:
       - uses: actions/checkout@v4
 
