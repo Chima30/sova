@@ -94,8 +94,11 @@ jobs:
           path: release/SOVA-*-mac-arm64.dmg
           if-no-files-found: error
 
+  # Publishes as soon as Windows is built. The Mac disk image is attached when
+  # it built; if GitHub had no Mac machine free, run the workflow again with
+  # "publish" ticked and the .dmg is added to the same release.
   publish:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    if: always() && github.event_name == 'workflow_dispatch' && inputs.publish && needs.windows.result == 'success'
     needs: [windows, mac]
     runs-on: ubuntu-latest
     steps:
@@ -105,11 +108,18 @@ jobs:
         with:
           path: out
 
-      - name: Publish release with both installers
+      - name: Publish the release, or add missing installers to it
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAC_RESULT: ${{ needs.mac.result }}
         run: |
           version=$(node -p "require('./package.json').version")
           tag="v$version"
-          if gh release view "$tag" >/dev/null 2>&1; then echo "Release $tag already exists, nothing to publish."; exit 0; fi
-          gh release create "$tag" out/SOVA-Setup/*.exe out/SOVA-mac/*.dmg --target "$GITHUB_SHA" --title "SOVA $tag" --notes-file RELEASE_NOTES.md
+          files=$(ls out/SOVA-Setup/*.exe out/SOVA-mac/*.dmg 2>/dev/null)
+          echo "Installers: $files"
+          [ "$MAC_RESULT" = "success" ] || echo "::warning::Mac build: $MAC_RESULT. Publishing with what was built; run again with publish ticked to add the Mac disk image."
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" $files --clobber
+          else
+            gh release create "$tag" $files --target "$GITHUB_SHA" --title "SOVA $tag" --notes-file RELEASE_NOTES.md
+          fi
