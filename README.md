@@ -1,20 +1,25 @@
 # SOVA
 
-When you're deep in focus, you don't notice your breathing speed up, your blinking slow down, or two hours pass without a break, until you're already drained.
+**Stay in focus. Stay in tune.** A focus timer that notices your breathing before you do, using your webcam and Presage's [SmartSpectra SDK](https://smartspectra.presagetech.com/docs).
 
-SOVA watches your breathing, pulse and blinking through your webcam with Presage's [SmartSpectra SDK](https://smartspectra.presagetech.com/docs), and suggests a breathing reset, an eye rest or a break at the right moment.
+## The moment
 
-**Stay in focus. Stay in tune.**
+You're 40 minutes into deep work. Your breathing has crept up and you haven't noticed.
 
-SOVA is a personal focus and recovery workstation. During a focus session it reads breathing rate, pulse, HRV, blinking, talking and face presence through your camera, then compares them with your own baseline to time its suggestions.
+1. **SOVA notices.** Your breathing has stayed well above your own baseline, the one SOVA learned in your first 2 minutes. It's not compared with a population "normal".
+2. **It waits, then nudges.** At the next pause in your typing it suggests a 60-second breathing reset. It never interrupts mid-sentence.
+3. **You breathe with the guide.** Your own breath, read live from the camera, is drawn in orange against the lavender pace to follow.
+4. **It shows you what changed.** A minute later it puts the before and after side by side, for example *Breathing 19 → 14 breaths/min*. Your own numbers, with no score and no verdict.
 
-SOVA is not a medical application, diagnostic tool, stress detector or productivity surveillance system. It is a personal self-reflection and focus companion.
+![SOVA noticing faster breathing during focus, suggesting a reset, and showing breathing before and after](docs/media/sova-moment.gif)
 
-Built for the DEV Presage SmartSpectra SDK Challenge (#presagechallenge).
+*Recorded with real camera readings. To fit the moment in a short clip it uses demo timing (`npm run demo`): a 40-second baseline instead of 2 minutes, and a 40-second tension window instead of 3.*
 
-## SmartSpectra SDK integration (where to look)
+SOVA is not a medical application, diagnostic tool, stress detector or productivity surveillance system. It is a personal focus and self-reflection companion. Built for the DEV Presage SmartSpectra SDK Challenge (#presagechallenge).
 
-SOVA uses the Presage SmartSpectra SDK (`@smartspectra/node-sdk` 3.4.0) for every live signal. Key files:
+## Where the SmartSpectra SDK is used
+
+SOVA uses `@smartspectra/node-sdk` 3.4.0 for every live signal.
 
 | File | What it does |
 | --- | --- |
@@ -22,12 +27,29 @@ SOVA uses the Presage SmartSpectra SDK (`@smartspectra/node-sdk` 3.4.0) for ever
 | [`src/main/main.js`](src/main/main.js) | `bindSmartSpectraIpc`, the packaged runtime path (`SMARTSPECTRA_CAPI_PATH`), camera-only permission for SOVA's own page, and the IPC that starts, restarts and stops the SDK |
 | [`src/renderer/measurement.js`](src/renderer/measurement.js) | Receives SDK events in the window, maps `ValidationCode` and `SmartSpectraErrorCode` values to user guidance; also contains the renderer-side SDK path (`useMediaStream`) as a fallback |
 | [`shared/core/signals.js`](shared/core/signals.js) | Reads `breathing.rate`, `breathing.upperTrace`, `breathing.inhaleExhaleRatio`, `cardio.pulseRate`, `cardio.hrv`, `face.blinking`, `face.talking`, and applies the confidence, stability, warm-up and range rules |
+| [`shared/core/cueEngine.js`](shared/core/cueEngine.js) | Decides the moment: tension against your own baseline over a time window, then waits for a typing pause |
 | [`src/renderer/session.js`](src/renderer/session.js) | Uses the live signals: baseline, tension cues, meeting snooze, away pause, live breath line, before-and-after values, and opt-in Presage AI check-ins and reflections via `requestInsight` |
 | [`shared/core/breathSound.js`](shared/core/breathSound.js) | Combines the SDK's breathing waveform with optional microphone breath sounds to label each heard breath as in or out |
 
 **Live Presage signals used:** breathing rate, breathing waveform, inhale:exhale ratio, pulse rate, HRV (RMSSD), blink detection, talking detection, and the SDK's live validation status (face, lighting, motion, frame rate).
 
-## What works in this build (desktop, Phases 1 and 2)
+**Confidence rule.** A value is shown or used only when its analysis window has filled, its confidence passes the threshold in `shared/config/sova-config.json` (45 by default, the documented breathing accuracy threshold), the SDK marks it stable, and it sits inside the documented valid range. Otherwise SOVA hides it and explains why. SOVA never estimates, smooths over or invents a reading, and never shows the SDK's stress index.
+
+## Try the moment yourself
+
+You need a webcam and a free [Presage API key](https://physiology.presagetech.com/auth/register).
+
+1. Install: download **SOVA-Setup.exe** from the [latest release](https://github.com/Chima30/sova/releases/latest) (Windows SmartScreen may warn because it isn't code-signed yet: **More info**, then **Run anyway**), or run from source with `npm install` then `npm run demo`.
+2. Accept the camera consent and paste your API key in **Settings**.
+3. Open **Focus**, pick a preset and press **Start**. Follow the signal check tips until the dot turns orange, then start the session.
+4. Sit naturally while SOVA learns your baseline (2 minutes, or 40 seconds with `npm run demo`).
+5. Breathe noticeably faster for a while. The cue appears at your next pause in typing. Press **Start 60-second reset**.
+6. Follow the guide. A minute after the reset (30 seconds in demo timing), SOVA shows your before and after values.
+
+For the quickest look at live SDK signals, press **Start 60-second check-in** on Home. No SOVA login is needed. Without a key or a connection, SOVA runs as a plain focus timer and says so.
+
+<details>
+<summary><strong>Everything else SOVA does</strong></summary>
 
 **60-second signal check-in**
 - A quick look at breathing, pulse and HRV from Home, without starting a focus session or timer
@@ -42,6 +64,7 @@ SOVA uses the Presage SmartSpectra SDK (`@smartspectra/node-sdk` 3.4.0) for ever
 - Direct camera capture in the main process at 30 fps, as Presage recommends, with an automatic 640x480 fallback and automatic reconnects for retryable SDK errors
 - Personal baseline from the first 2 minutes of steady signal (breathing or pulse), restarted after any interruption, with a recalibrate option
 - Calibration reminders when the signal needs attention for more than a minute
+- A 3D heart that swells with your breath and beats at your measured pulse, only while each reading is usable
 
 **Focus**
 - Focus session presets: Deep Work, Studying, Reading, Creative Work, General Work
@@ -80,72 +103,14 @@ SOVA uses the Presage SmartSpectra SDK (`@smartspectra/node-sdk` 3.4.0) for ever
 
 **Everywhere**
 - Offline: timers, recovery, sounds, history and insights work without internet; live readings need a connection
-- Reduced-motion breathing guide, screen-reader announcements, keyboard access
+- Light and dark mode, reduced motion, screen-reader announcements, keyboard access
 
 Planned next: Android app with the same shared rules and config.
 
-## Install on Windows (no setup needed)
+</details>
 
-1. Download **SOVA-Setup.exe** from the [latest release](https://github.com/Chima30/sova/releases/latest).
-2. Run it. Windows SmartScreen may warn because the installer is not code-signed yet: click **More info**, then **Run anyway**.
-3. Open SOVA, accept the camera consent, and paste your free [Presage API key](https://physiology.presagetech.com/auth/register) in **Settings**.
-4. Make sure Windows lets desktop apps use the camera: Settings › Privacy & security › Camera › **Let desktop apps access your camera**.
-
-Every push to `main` also builds the installer automatically with GitHub Actions ([workflow](.github/workflows/windows-installer.yml)).
-
-## Run from source
-
-## Requirements
-
-- Node.js 20 or later (24 LTS recommended)
-- Windows x64, macOS on Apple Silicon, or Linux x64/arm64 with glibc 2.35+ (Ubuntu 22.04+, Debian 12+)
-- A webcam
-- A free Presage API key from the [developer portal](https://physiology.presagetech.com/auth/register)
-
-## Setup
-
-```bash
-git clone <this repo>
-cd sova
-npm install
-npm start
-```
-
-`npm install` downloads the SDK's native runtime for every supported platform (a few hundred MB). That is expected; only your platform's runtime is loaded.
-
-On first launch, accept the camera consent, then paste your API key in **Settings**. The key is encrypted with your operating system's secure storage (Electron safeStorage) and is never written to the repo.
-
-For development you can instead set an environment variable before `npm start`:
-
-```bash
-# macOS / Linux
-export SOVA_PRESAGE_API_KEY=your-key
-# Windows PowerShell
-$env:SOVA_PRESAGE_API_KEY="your-key"
-```
-
-### Testing instructions for judges
-
-1. `npm install`, then `npm start`.
-2. Accept the consent screen and add your own Presage API key in Settings.
-3. On **Home**, press **Start 60-second check-in** for the quickest look at live SDK signals.
-4. Open **Focus**, pick **Studying**, and press **Start**. Follow the signal check tips until the dot turns orange, then start the session.
-5. Sit naturally for 2 minutes while the baseline is set. Live values appear only when the signal is reliable.
-6. Try **Breathing reset** to see your live breath against the target pace, and talk for 20 seconds to see the meeting snooze.
-
-No SOVA login is required. Live readings need your own free Presage API key (step 2). Without a key or a connection, SOVA runs as a plain focus timer and says so.
-
-## Build installers
-
-```bash
-npm run dist:win     # Windows installer in release/ (also built by GitHub Actions)
-npm run dist:mac     # macOS (Apple Silicon)
-npm run dist:linux   # Linux AppImage
-```
-
-Packaging follows Presage's guide: the platform runtime folder is copied to `resources/smartspectra/` and loaded from there. On macOS the camera usage description and the library-validation entitlement are set in `package.json` and `build/entitlements.mac.plist`. On Windows, sign the bundled DLLs with your app for distribution.
-
-## How SOVA uses the SDK
+<details>
+<summary><strong>How SOVA uses each SDK signal</strong></summary>
 
 | Signal | SDK field | SOVA use |
 | --- | --- | --- |
@@ -158,11 +123,65 @@ Packaging follows Presage's guide: the platform runtime folder is copied to `res
 | Talking | `face.talking` | Automatic meeting snooze |
 | Validation status | `validationStatus` event | Signal check tips, away detection |
 
-**Confidence rule.** A value is shown or used only when its analysis window has filled, its confidence passes the threshold in `shared/config/sova-config.json` (45 by default, the documented breathing accuracy threshold), the SDK marks it stable, and it sits inside the documented valid range. Otherwise SOVA hides it and explains why. SOVA never estimates, smooths over or invents a reading, and never shows the SDK's stress index.
-
 SOVA calls the SDK's `requestInsight` only when the user has turned on AI reflections. The SDK also sends derived vitals to Presage's AI service automatically during sessions; see Consent and data handling.
 
+</details>
+
+<details>
+<summary><strong>Install, run from source and build</strong></summary>
+
+**Install on Windows**
+
+1. Download **SOVA-Setup.exe** from the [latest release](https://github.com/Chima30/sova/releases/latest).
+2. Run it. Windows SmartScreen may warn because the installer is not code-signed yet: click **More info**, then **Run anyway**.
+3. Open SOVA, accept the camera consent, and paste your free [Presage API key](https://physiology.presagetech.com/auth/register) in **Settings**.
+4. Make sure Windows lets desktop apps use the camera: Settings › Privacy & security › Camera › **Let desktop apps access your camera**.
+
+Every push to `main` also builds the installer automatically with GitHub Actions ([workflow](.github/workflows/windows-installer.yml)).
+
+**Requirements**
+
+- Node.js 20 or later (24 LTS recommended)
+- Windows x64, macOS on Apple Silicon, or Linux x64/arm64 with glibc 2.35+ (Ubuntu 22.04+, Debian 12+)
+- A webcam
+- A free Presage API key from the [developer portal](https://physiology.presagetech.com/auth/register)
+
+**Run from source**
+
+```bash
+git clone https://github.com/Chima30/sova.git
+cd sova
+npm install
+npm start        # or: npm run demo, for the short demo timing
+```
+
+`npm install` downloads the SDK's native runtime for every supported platform (a few hundred MB). That is expected; only your platform's runtime is loaded.
+
+On first launch, accept the camera consent, then paste your API key in **Settings**. The key is encrypted with your operating system's secure storage (Electron safeStorage) and is never written to the repo. For development you can instead set an environment variable before `npm start`:
+
+```bash
+# macOS / Linux
+export SOVA_PRESAGE_API_KEY=your-key
+# Windows PowerShell
+$env:SOVA_PRESAGE_API_KEY="your-key"
+```
+
+**Build installers**
+
+```bash
+npm run dist:win     # Windows installer in release/ (also built by GitHub Actions)
+npm run dist:mac     # macOS (Apple Silicon)
+npm run dist:linux   # Linux AppImage
+```
+
+Packaging follows Presage's guide: the platform runtime folder is copied to `resources/smartspectra/` and loaded from there. On macOS the camera usage description and the library-validation entitlement are set in `package.json` and `build/entitlements.mac.plist`. On Windows, sign the bundled DLLs with your app for distribution.
+
+</details>
+
 ## Consent and data handling
+
+<details>
+<summary><strong>What the camera, microphone and AI features do with your data</strong></summary>
 
 **Camera consent**
 - On first launch SOVA shows a consent screen explaining what the camera is used for, what is stored and what goes to Presage. Live readings start only after the user ticks "I understand and agree" and chooses "Allow camera". Choosing "Not now" keeps SOVA as a plain focus timer with the camera off.
@@ -200,11 +219,11 @@ SOVA calls the SDK's `requestInsight` only when the user has turned on AI reflec
 - SOVA is a focus and self-reflection tool. It makes no diagnosis or treatment claims, shows no stress score, and is not for medical decisions. Presage states its SDK metrics are for general wellness only and are not FDA-cleared.
 - Readings can be wrong during large motion, chewing gum, flickering light, talking (breathing), dark or striped clothing (breathing), or with the face turned away. SOVA hides any value whose confidence is too low instead of showing it.
 
+</details>
+
 ## For contributors
 
 See [AGENTS.md](AGENTS.md) for commands and rules, and [docs/state-machines.md](docs/state-machines.md) for every stateful flow (session, live signal, check-in) with diagrams.
-
-## Project layout
 
 ```
 shared/config/sova-config.json   presets, thresholds, windows, cooldowns, breathing patterns

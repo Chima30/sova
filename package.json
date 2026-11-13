@@ -17,7 +17,8 @@
     "dist:mac": "npm run build && electron-builder --mac --arm64",
     "dist:linux": "npm run build && electron-builder --linux --x64",
     "docs:machines": "node scripts/gen-state-docs.js",
-    "smoke:checkin": "npm run build && electron test/smoke/checkin-smoke.js"
+    "smoke:checkin": "npm run build && electron test/smoke/checkin-smoke.js",
+    "demo": "npm run build && node scripts/start-demo.js"
   },
   "dependencies": {
     "@smartspectra/node-sdk": "3.4.0",

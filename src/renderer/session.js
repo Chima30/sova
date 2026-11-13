@@ -509,7 +509,7 @@ class LiveSession {
       this.engine.noteCue();
       this.log('cue-tension');
       toast({
-        title: 'Your breathing has been faster than usual for a few minutes',
+        title: 'Your breathing has been faster than usual for a while',
         body: 'Take a short reset whenever you are ready.',
         actions: [
           { label: `Start ${this.config.defaultBreathingSeconds}-second reset`, primary: true, onClick: () => this.startReset() },
@@ -602,11 +602,25 @@ class LiveSession {
         this.engine.resume('reset');
         const ev = this.log('reset', { seconds: res.seconds, completed: res.completed, pattern: res.patternId, before: res.before, after: null, breathSound: res.breathSound || null });
         if (this.mode === 'live' && res.before) {
-          setTimeout(() => { if (!this.ended) ev.after = this.usableSnapshot(); }, this.config.afterResetWaitSeconds * 1000);
+          setTimeout(() => {
+            if (this.ended) return;
+            ev.after = this.usableSnapshot();
+            this.showBeforeAfter(res.before, ev.after);
+          }, this.config.afterResetWaitSeconds * 1000);
         }
         this.renderRunning();
       },
     });
+  }
+
+  // A minute after a reset: the readings before it and now, side by side.
+  // Only readings that were usable at both moments are shown, with no verdict.
+  showBeforeAfter(before, after) {
+    const parts = [['breathing', 'Breathing', 'breaths/min'], ['pulse', 'Pulse', 'bpm'], ['hrv', 'HRV', 'ms']]
+      .filter(([k]) => before[k] != null && after[k] != null)
+      .map(([k, label, unit]) => `${label} ${Math.round(before[k])} → ${Math.round(after[k])} ${unit}`);
+    if (!parts.length) return;
+    toast({ title: 'A minute after your reset', body: parts.join(' · '), actions: [{ label: 'OK', primary: true, onClick: () => {} }] });
   }
 
   startEyeRest() {
@@ -790,6 +804,7 @@ class LiveSession {
       <div class="page-head">
         <div><p class="t-small" id="block-label"></p><h1 class="t-title">${esc(this.preset.name)}</h1></div>
         <div class="row">
+          ${this.config.demoTiming ? '<span class="state-chip" title="Shorter baseline and cue timing for a demo recording. Readings are real.">Demo timing</span>' : ''}
           ${live ? `<span class="status"><span class="dot live" id="cam-dot"></span><span id="cam-text">Camera on</span></span>
           <button class="btn btn-quiet" id="cam-toggle">${icon(this.cameraPaused ? 'camera' : 'camera-off', 16)}<span>${this.cameraPaused ? 'Resume camera' : 'Pause camera'}</span></button>` : ''}
         </div>

@@ -27,7 +27,23 @@ if (app.isPackaged) {
 const { bindSmartSpectraIpc } = require('@smartspectra/node-sdk/main');
 const { Store, publicSettings } = require('./store');
 const { NativeMeasurement } = require('./nativeMeasurement');
-const config = require('../../shared/config/sova-config.json');
+const config = demoTiming(require('../../shared/config/sova-config.json'));
+
+// SOVA_DEMO_TIMING=1 shortens the waits so the focus-to-reset moment fits in
+// a short screen recording: a 40-second baseline, a 40-second tension window,
+// and the after value 30 seconds after a reset. Readings and the rules that
+// gate them are unchanged; only the timing is shorter. Off unless set.
+function demoTiming(c) {
+  if (process.env.SOVA_DEMO_TIMING !== '1') return c;
+  const d = JSON.parse(JSON.stringify(c));
+  d.baseline.durationSeconds = 40;
+  d.cues.tension.windowSeconds = 40;
+  d.cues.cooldownMinutes = 2;
+  d.cues.typingPauseMaxWaitSeconds = 5;
+  d.afterResetWaitSeconds = 30;
+  d.demoTiming = true;
+  return d;
+}
 const { toCSV, toJSON } = require('../../shared/core/exporter');
 
 app.setName('SOVA');
