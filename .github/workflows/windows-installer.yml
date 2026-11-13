@@ -1,10 +1,12 @@
 name: Installers
 
-# Builds SOVA-Setup.exe (Windows) and SOVA-<version>-mac-arm64.dmg (macOS,
-# Apple Silicon) on every push to main and uploads them as workflow artifacts
-# only. Nothing is published automatically. To publish a GitHub Release with
-# both, run this workflow by hand (Actions tab, Run workflow) with "publish"
-# ticked, once John has approved the version.
+# Every push to main builds SOVA-Setup.exe (Windows). Running this workflow by
+# hand (Actions tab, Run workflow) also builds SOVA-<version>-mac-arm64.dmg
+# (macOS, Apple Silicon): GitHub's free Mac machines can queue for a long
+# time, so the Mac build doesn't run on every push. Both are uploaded as
+# workflow artifacts only. Nothing is published automatically: tick "publish"
+# on a manual run, once John has approved the version, to publish a GitHub
+# Release with both installers.
 
 on:
   push:
@@ -53,7 +55,9 @@ jobs:
           if-no-files-found: error
 
   mac:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-latest   # Apple Silicon
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 

@@ -151,7 +151,7 @@ SOVA calls the SDK's `requestInsight` only when the user has turned on AI reflec
 2. The app is not notarized by Apple yet, so the first time, right-click SOVA in Applications and choose **Open**, then **Open** again. On macOS 15 or later, if there is no Open button: try to open it once, then go to System Settings › Privacy & Security and choose **Open Anyway**.
 3. Accept the camera consent in SOVA, and allow camera access when macOS asks. Paste your free [Presage API key](https://physiology.presagetech.com/auth/register) in **Settings**.
 
-Every push to `main` builds both installers automatically with GitHub Actions ([workflow](.github/workflows/windows-installer.yml)).
+Every push to `main` builds the Windows installer automatically with GitHub Actions ([workflow](.github/workflows/windows-installer.yml)). The Mac disk image is built when the workflow is run by hand, including for every release.
 
 **Requirements**
 
