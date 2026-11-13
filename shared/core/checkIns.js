@@ -90,4 +90,24 @@ function compareWithLast(kind, current, checkIns) {
   return { previous: prev.values[kind], previousAt: prev.at, diff: Math.round((v - prev.values[kind]) * 10) / 10 };
 }
 
-module.exports = { KINDS, median, percentile, summarize, history, personalRange, position, compareWithLast };
+// Your check-ins over the last `days` days: one point per day that has one,
+// the median of that day's stored check-in values. Days without a check-in
+// are left out, never filled in.
+function trend(kind, checkIns, { days = 14, now = new Date() } = {}) {
+  const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+  const byDay = new Map();
+  for (const c of checkIns || []) {
+    const v = c.values && c.values[kind];
+    const at = new Date(c.at);
+    if (!Number.isFinite(v) || Number.isNaN(at.getTime()) || at < start || at > now) continue;
+    const k = dayKey(at);
+    if (!byDay.has(k)) byDay.set(k, []);
+    byDay.get(k).push(v);
+  }
+  return [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, values]) => ({ day, value: Math.round(median(values) * 10) / 10, count: values.length }));
+}
+
+module.exports = { KINDS, median, percentile, summarize, history, personalRange, position, compareWithLast, trend };

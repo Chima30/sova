@@ -13,6 +13,7 @@ const { SessionEngine, formatClock } = require('../../shared/core/sessionEngine'
 const { openReset, openEyeRest } = require('./reset');
 const { BreathLines, levelFromTrace } = require('./breathLines');
 const { BreathHeart } = require('./breathHeart');
+const { seesPanel, updateSees } = require('./sees');
 const { icon } = require('./icons');
 const { renderTimeline } = require('./timeline');
 const { applyOverrides } = require('../../shared/core/overrides');
@@ -304,6 +305,7 @@ class LiveSession {
     const t = now();
     const cfg = this.config.signals;
     this.metricsCount += 1;
+    this.lastReading = { r, elapsed, t };
     if (this.metricsCount === 1 || this.metricsCount % 60 === 0) {
       console.info('[SOVA] metrics update', this.metricsCount, {
         breathing: r.breathing, pulse: r.pulse, hrv: r.hrv, elapsed: Math.round(elapsed),
@@ -866,7 +868,8 @@ class LiveSession {
           ${this.aiEnabled() ? `<div class="stack-8" style="border-top: 1px solid var(--hair); padding-top: 16px"><div class="row-between"><span class="t-section">AI check-in</span><button class="btn btn-quiet" id="ai-btn">${icon('message-square-text', 16)}<span>Ask Presage AI</span></button></div><div id="ai-out" class="stack-8"><p class="t-small">A short read of your pulse, HRV and breathing so far, available after about 15 seconds of readings.</p></div></div>` : ''}
         </section>
       </div>
-      <section class="panel" style="margin-top: 24px">
+      ${live ? `<div style="margin-top: 20px">${seesPanel()}</div>` : ''}
+      <section class="panel" style="margin-top: 20px">
         <div class="panel-head"><h2 class="t-section">Session so far</h2><span class="t-meta" id="tl-meta"></span></div>
         <div id="live-tl"></div>
       </section>`;
@@ -960,6 +963,17 @@ class LiveSession {
 
     this.updateBreathLines();
     this.renderSignalState();
+    if (this.mode === 'live') {
+      const lr = this.lastReading;
+      updateSees({
+        reading: lr && !this.cameraPaused ? lr.r : null,
+        elapsed: lr ? lr.elapsed : 0,
+        ageSeconds: lr ? t - lr.t : 0,
+        count: this.metricsCount,
+        validation: this.cameraPaused ? null : this.validation,
+        signalsCfg: this.config.signals,
+      });
+    }
     if (this.mode !== 'live') { this.renderMetric('breathing', null, null, 'breaths/min', 'not-measuring'); return; }
 
     const bb = $('#baseline-banner');

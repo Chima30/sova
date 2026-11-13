@@ -110,6 +110,14 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('[data-nav="insights"]').click()`);
     await wait(500);
     await shot(win, 'insights.png');
+    report.checkInTrend = await run(`[...document.querySelectorAll('.trend')].map((t) => t.querySelector('svg') ? 'chart' : 'empty').join(',')`);
+    await run(`document.querySelector('.trend').scrollIntoView({ block: 'center' })`);
+    await shot(win, 'insights-trend.png');
+    await run(`document.querySelector('[data-nav="home"]').click()`);
+    await wait(500);
+    report.homeDataCard = await run(`!!document.getElementById('h-forget') && !!document.getElementById('h-export')`);
+    await run(`document.getElementById('h-forget').scrollIntoView({ block: 'center' })`);
+    await shot(win, 'home-data.png');
     await run(`document.querySelector('[data-nav="settings"]').click()`);
     await wait(500);
     await run(`document.querySelector('details').open = true; document.querySelector('details').scrollIntoView()`);

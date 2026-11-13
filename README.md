@@ -28,6 +28,7 @@ SOVA uses `@smartspectra/node-sdk` 3.4.0 for every live signal.
 | [`src/renderer/measurement.js`](src/renderer/measurement.js) | Receives SDK events in the window, maps `ValidationCode` and `SmartSpectraErrorCode` values to user guidance; also contains the renderer-side SDK path (`useMediaStream`) as a fallback |
 | [`shared/core/signals.js`](shared/core/signals.js) | Reads `breathing.rate`, `breathing.upperTrace`, `breathing.inhaleExhaleRatio`, `cardio.pulseRate`, `cardio.hrv`, `face.blinking`, `face.talking`, and applies the confidence, stability, warm-up and range rules |
 | [`shared/core/cueEngine.js`](shared/core/cueEngine.js) | Decides the moment: tension against your own baseline over a time window, then waits for a typing pause |
+| [`shared/core/pipeline.js`](shared/core/pipeline.js), [`src/renderer/sees.js`](src/renderer/sees.js) | **What SOVA sees**: a live readout, during check-ins and sessions, of every value leaving the SDK, with its SDK field, confidence, and whether SOVA used it or held it back (and why) |
 | [`src/renderer/session.js`](src/renderer/session.js) | Uses the live signals: baseline, tension cues, meeting snooze, away pause, live breath line, before-and-after values, and opt-in Presage AI check-ins and reflections via `requestInsight` |
 | [`shared/core/breathSound.js`](shared/core/breathSound.js) | Combines the SDK's breathing waveform with optional microphone breath sounds to label each heard breath as in or out |
 
@@ -46,7 +47,7 @@ You need a webcam and a free [Presage API key](https://physiology.presagetech.co
 5. Breathe noticeably faster for a while. The cue appears at your next pause in typing. Press **Start 60-second reset**.
 6. Follow the guide. A minute after the reset (30 seconds in demo timing), SOVA shows your before and after values.
 
-For the quickest look at live SDK signals, press **Start 60-second check-in** on Home. No SOVA login is needed. Without a key or a connection, SOVA runs as a plain focus timer and says so.
+For the quickest look at live SDK signals, press **Start 60-second check-in** on Home and watch the **What SOVA sees** panel: each value straight from the SDK, its confidence, and whether SOVA used it or held it back. No SOVA login is needed. Without a key or a connection, SOVA runs as a plain focus timer and says so.
 
 <details>
 <summary><strong>Everything else SOVA does</strong></summary>
@@ -64,6 +65,9 @@ For the quickest look at live SDK signals, press **Start 60-second check-in** on
 - Direct camera capture in the main process at 30 fps, as Presage recommends, with an automatic 640x480 fallback and automatic reconnects for retryable SDK errors
 - Personal baseline from the first 2 minutes of steady signal (breathing or pulse), restarted after any interruption, with a recalibrate option
 - Calibration reminders when the signal needs attention for more than a minute
+- "What SOVA sees": the live values leaving the SDK, with confidence and why any value is held back, computed on this computer with no video saved
+- Your check-ins over the last 14 days in Insights, one point per day, with your own usual range shaded
+- "Your data stays on this computer" on Home, with export and a confirmed "Forget everything"
 - A 3D heart that swells with your breath and beats at your measured pulse, only while each reading is usable
 
 **Focus**

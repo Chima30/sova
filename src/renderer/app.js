@@ -13,6 +13,7 @@ const { cleanOverrides, LIMITS } = require('../../shared/core/overrides');
 const { allResets, exhaleTrend } = require('../../shared/core/breathHistory');
 const { BreathLines, mark } = require('./breathLines');
 const { BreathOrb } = require('./breathOrb');
+const ci = require('../../shared/core/checkIns');
 const motion = require('./motion');
 const { icon } = require('./icons');
 const { formatClock } = require('../../shared/core/sessionEngine');
@@ -236,6 +237,54 @@ function pageHead(title, sub, right = '') {
 
 function stat(label, value, note = '') {
   return `<div class="stat"><span class="stat-label">${esc(label)}</span><span class="t-figure">${value}</span>${note ? `<span class="stat-note">${note}</span>` : ''}</div>`;
+}
+
+// A line of your own check-in medians over the last 14 days, with your usual
+// range shaded once it exists. Days without a check-in stay empty; no verdict.
+const TREND_DAYS = 14;
+function checkInTrend(kind, checkIns, sessions) {
+  const LABELS = { breathing: ['Breathing', 'breaths/min'], pulse: ['Pulse', 'bpm'], hrv: ['HRV', 'ms'] };
+  const [label, unit] = LABELS[kind];
+  const now = new Date();
+  const points = ci.trend(kind, checkIns, { days: TREND_DAYS, now });
+  const range = ci.personalRange(ci.history(kind, checkIns, sessions));
+  const head = `<div class="row-between"><span class="metric-label">${label}</span>${points.length ? `<span class="t-meta">latest ${points[points.length - 1].value} ${unit}</span>` : ''}</div>`;
+  if (!points.length) return `<div class="trend">${head}<p class="t-small trend-empty">No ${label.toLowerCase()} check-ins in the last ${TREND_DAYS} days.</p></div>`;
+
+  const W = 300, H = 120, PX = 10, PY = 12;
+  const values = points.map((p) => p.value).concat(range.ready ? [range.low, range.high] : []);
+  let lo = Math.min(...values), hi = Math.max(...values);
+  const pad = Math.max(1, (hi - lo) * 0.2);
+  lo -= pad; hi += pad;
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (TREND_DAYS - 1));
+  const x = (day) => {
+    const [y, m, d] = day.split('-').map(Number);
+    const i = Math.round((new Date(y, m - 1, d) - start) / 86400000);
+    return PX + (i / (TREND_DAYS - 1)) * (W - 2 * PX);
+  };
+  const y = (v) => PY + (1 - (v - lo) / (hi - lo)) * (H - 2 * PY);
+  const band = range.ready ? `<rect class="trend-band" x="${PX}" y="${y(range.high).toFixed(1)}" width="${W - 2 * PX}" height="${Math.max(2, y(range.low) - y(range.high)).toFixed(1)}" rx="4"/>` : '';
+  const line = points.length > 1 ? `<polyline class="trace trend-line" fill="none" points="${points.map((p) => `${x(p.day).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ')}"/>` : '';
+  const dots = points.map((p) => `<circle class="trend-dot" cx="${x(p.day).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="3.5"><title>${esc(p.day)}: ${p.value} ${unit}${p.count > 1 ? ` (median of ${p.count})` : ''}</title></circle>`).join('');
+  const short = (d) => d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  const aria = `${label} check-ins over the last ${TREND_DAYS} days: ${points.map((p) => `${p.day} ${p.value}`).join(', ')}${range.ready ? `. Your usual range ${range.low} to ${range.high} ${unit}` : ''}`;
+  return `<div class="trend">${head}
+    <svg class="trend-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(aria)}">${band}${line}${dots}</svg>
+    <div class="row-between t-meta"><span>${esc(short(start))}</span><span>Today</span></div>
+    <span class="t-small">${range.ready ? `Your usual ${range.low}–${range.high} ${unit}` : `Your usual range appears after ${range.needReadings} readings over ${range.needDays} days`}</span>
+  </div>`;
+}
+
+// Delete everything, after a confirmation. Used by Settings and Home.
+function confirmDeleteAll() {
+  toast({
+    title: 'Delete all SOVA data?',
+    body: 'This removes every session, signal check-in, breathing reset, reflection, note, AI reflection, setting and your saved API key from this computer. It cannot be undone.',
+    actions: [
+      { label: 'Delete everything', primary: true, onClick: async () => { await window.sova.deleteAll(); state.settings = await window.sova.getSettings(); announce('All data deleted'); state.timerOnly = false; state.selectedPreset = state.settings.presetId; startOnboarding(); } },
+      { label: 'Cancel' },
+    ],
+  });
 }
 
 // A count (not a reading) that counts up when the section opens.
@@ -806,6 +855,14 @@ const VIEWS = {
           <div class="panel-head"><h2 class="t-section">Last session</h2>${last ? `<span class="t-meta">${esc(fmtDate(last.startedAt))} · ${esc(last.presetName)} · ${esc(fmtMinutes(last.focusSeconds))}</span>` : ''}</div>
           ${last ? renderTimeline(last, { compact: true }) : empty('No sessions yet. Your first session timeline will appear here.')}
         </section>
+        <section class="panel row-between" aria-labelledby="h-data-title">
+          <div class="stack-8"><h2 class="t-section" id="h-data-title">${icon('shield-check', 16)} Your data stays on this computer</h2>
+            <span class="t-small">${sessions.length} session${sessions.length === 1 ? '' : 's'} and ${checkIns.length} check-in${checkIns.length === 1 ? '' : 's'} stored here, nowhere else. Video is never saved.</span></div>
+          <div class="row">
+            <button class="btn btn-quiet" id="h-export">${icon('download', 16)}Export a copy</button>
+            <button class="btn btn-quiet btn-danger" id="h-forget">${icon('trash-2', 16)}Forget everything</button>
+          </div>
+        </section>
       </div>`;
     // The orb previews a calm guided breath in lavender. Nothing is measured
     // here, so it never turns orange on Home.
@@ -840,6 +897,8 @@ const VIEWS = {
     }));
     const gc = $('#give-consent'); if (gc) gc.addEventListener('click', reviewConsent);
     const ts = $('#to-settings'); if (ts) ts.addEventListener('click', () => go('settings'));
+    $('#h-export').addEventListener('click', () => window.sova.exportData('json'));
+    $('#h-forget').addEventListener('click', confirmDeleteAll);
   },
 
   focus() {
@@ -991,7 +1050,7 @@ const VIEWS = {
   },
 
   async insights() {
-    const [sessions, standalone] = await Promise.all([window.sova.listSessions(), window.sova.listResets()]);
+    const [sessions, standalone, checkIns] = await Promise.all([window.sova.listSessions(), window.sova.listResets(), window.sova.listCheckIns()]);
     if (state.view !== 'insights') return;
     const w = weekly(sessions);
     const ba = beforeAfter(sessions);
@@ -1027,6 +1086,10 @@ const VIEWS = {
             </div>
           </section>
         </div>
+        <section class="panel">
+          <div class="panel-head"><h2 class="t-section">Your check-ins, last 14 days</h2><span class="t-meta">One point per day · your own usual range shaded</span></div>
+          <div class="grid-3">${ci.KINDS.map((k) => checkInTrend(k, checkIns, sessions)).join('')}</div>
+        </section>
         <section class="panel">
           <div class="panel-head"><h2 class="t-section">Timeline replay</h2>
             ${sessions.length ? `<label class="row t-small">Session <select id="tl-pick">${sessions.slice(0, 30).map((s) => `<option value="${esc(s.id)}" ${pick && s.id === pick.id ? 'selected' : ''}>${esc(fmtDate(s.startedAt))} · ${esc(s.presetName)} · ${esc(fmtMinutes(s.focusSeconds))}</option>`).join('')}</select></label>` : ''}</div>
@@ -1359,14 +1422,7 @@ const VIEWS = {
     $('#sg').addEventListener('change', (e) => saveSettings({ soundGuide: e.target.checked }));
     $('#exp-csv').addEventListener('click', () => window.sova.exportData('csv'));
     $('#exp-json').addEventListener('click', () => window.sova.exportData('json'));
-    $('#del').addEventListener('click', () => toast({
-      title: 'Delete all SOVA data?',
-      body: 'This removes every session, signal check-in, breathing reset, reflection, note, AI reflection, setting and your saved API key from this computer. It cannot be undone.',
-      actions: [
-        { label: 'Delete everything', primary: true, onClick: async () => { await window.sova.deleteAll(); state.settings = await window.sova.getSettings(); announce('All data deleted'); state.timerOnly = false; state.selectedPreset = state.settings.presetId; startOnboarding(); } },
-        { label: 'Cancel' },
-      ],
-    }));
+    $('#del').addEventListener('click', confirmDeleteAll);
     $('#consent').addEventListener('click', reviewConsent);
   },
 };

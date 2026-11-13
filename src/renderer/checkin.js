@@ -10,6 +10,7 @@ const { createMeasurement, now } = require('./measurement');
 const { checkUsable, HIDDEN_REASON_TEXT } = require('../../shared/core/signals');
 const ci = require('../../shared/core/checkIns');
 const { BreathLines, levelFromTrace } = require('./breathLines');
+const { seesPanel, updateSees } = require('./sees');
 const { icon } = require('./icons');
 const { createMachine } = require('../../shared/core/machine');
 const { CHECK_IN } = require('../../shared/core/machines');
@@ -156,6 +157,8 @@ class CheckIn {
   onReading(r, elapsed) {
     if (!this.machine.is('measuring', 'extending')) return;
     const t = now();
+    this.readCount = (this.readCount || 0) + 1;
+    this.lastReading = { r, elapsed, t };
     for (const kind of ci.KINDS) {
       const check = checkUsable(kind, r[kind], elapsed, this.config.signals);
       if (check.usable) {
@@ -279,7 +282,8 @@ class CheckIn {
           <div class="panel-head"><h2 class="t-section">Signal quality</h2></div>
           <div class="rows" id="ci-signals" aria-live="polite"></div>
         </section>
-      </div>`;
+      </div>
+      <div style="margin-top: 20px">${seesPanel('ci-sees')}</div>`;
     $('#ci-stop').addEventListener('click', () => this.cancel());
     $('#ci-skip').addEventListener('click', () => { this.skipExtra = true; });
     this.lines = new BreathLines($('#ci-lines'), { lines: 28, reduced: this.reduced });
@@ -313,6 +317,17 @@ class CheckIn {
     const face = this.faceVisible == null ? ['off', 'Waiting'] : this.faceVisible ? ['live', 'In view'] : ['warn', 'Not found'];
     $('#ci-signals').innerHTML = ci.KINDS.map(row).join('')
       + `<div class="row-item"><span class="row-title"><span class="dot ${face[0]}"></span> Face</span><span class="row-aside t-small">${face[1]}</span></div>`;
+
+    const lr = this.lastReading;
+    updateSees({
+      id: 'ci-sees',
+      reading: lr ? lr.r : null,
+      elapsed: lr ? lr.elapsed : 0,
+      ageSeconds: lr ? now() - lr.t : 0,
+      count: this.readCount || 0,
+      validation: this.validation,
+      signalsCfg: this.config.signals,
+    });
   }
 }
 
