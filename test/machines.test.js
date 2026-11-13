@@ -84,5 +84,7 @@ test('listeners and history record transitions', () => {
 });
 
 test('docs/state-machines.md is up to date (run npm run docs:machines)', () => {
-  assert.equal(fs.readFileSync(file, 'utf8'), render());
+  // Windows checkouts turn line endings into CRLF, so compare them as LF.
+  const lf = (s) => s.replace(/\r\n/g, '\n');
+  assert.equal(lf(fs.readFileSync(file, 'utf8')), lf(render()));
 });
