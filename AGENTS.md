@@ -1,6 +1,6 @@
 # Working on SOVA
 
-Guide for people and coding agents. `CLAUDE.md` points here.
+Guide for people and coding agents.
 
 SOVA is an Electron desktop app for the DEV Presage SmartSpectra SDK Challenge: a focus and recovery workstation that reads breathing, pulse and HRV from the webcam. It is not a medical device.
 
