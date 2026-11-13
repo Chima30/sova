@@ -1,9 +1,10 @@
-name: Windows installer
+name: Installers
 
-# Builds SOVA-Setup.exe on a Windows machine on every push to main and
-# uploads it as a workflow artifact only. Nothing is published automatically.
-# To publish a GitHub Release, run this workflow by hand (Actions tab, Run
-# workflow) with "publish" ticked, once John has approved the version.
+# Builds SOVA-Setup.exe (Windows) and SOVA-<version>-mac-arm64.dmg (macOS,
+# Apple Silicon) on every push to main and uploads them as workflow artifacts
+# only. Nothing is published automatically. To publish a GitHub Release with
+# both, run this workflow by hand (Actions tab, Run workflow) with "publish"
+# ticked, once John has approved the version.
 
 on:
   push:
@@ -19,7 +20,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,15 +52,60 @@ jobs:
           path: release/SOVA-Setup-*.exe
           if-no-files-found: error
 
-      - name: Publish release (manual runs only, when approved)
-        if: github.event_name == 'workflow_dispatch' && inputs.publish
-        shell: pwsh
+  mac:
+    runs-on: macos-14   # Apple Silicon
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Unit tests
+        run: npm test
+
+      # No Apple Developer certificate yet: sign ad hoc so the app runs on
+      # Apple Silicon. People open it the first time with right-click › Open.
+      - name: Build disk image
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run build && npx electron-builder --mac --arm64 --publish never -c.mac.identity=-
+
+      - name: Check the SDK runtime is bundled and the app is signed
+        run: |
+          APP="$(ls -d release/mac-arm64/*.app | head -1)"
+          ls -la "$APP/Contents/Resources/smartspectra"
+          test -f "$APP/Contents/Resources/smartspectra/libsmartspectra_capi.dylib" || { echo 'libsmartspectra_capi.dylib missing'; exit 1; }
+          test -d "$APP/Contents/Resources/smartspectra/graph" || { echo 'SDK graph folder missing'; exit 1; }
+          /usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$APP/Contents/Info.plist"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q 'device.camera' || { echo 'camera entitlement missing'; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SOVA-mac
+          path: release/SOVA-*-mac-arm64.dmg
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+
+      - name: Publish release with both installers
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $version = (Get-Content package.json | ConvertFrom-Json).version
-          $tag = "v$version"
-          gh release view $tag 2>$null
-          if ($LASTEXITCODE -eq 0) { Write-Host "Release $tag already exists, nothing to publish."; exit 0 }
-          $exe = Get-ChildItem release/SOVA-Setup-*.exe | Select-Object -First 1
-          gh release create $tag $exe.FullName --target $env:GITHUB_SHA --title "SOVA $tag" --notes-file RELEASE_NOTES.md
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then echo "Release $tag already exists, nothing to publish."; exit 0; fi
+          gh release create "$tag" out/SOVA-Setup/*.exe out/SOVA-mac/*.dmg --target "$GITHUB_SHA" --title "SOVA $tag" --notes-file RELEASE_NOTES.md

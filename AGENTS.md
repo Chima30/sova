@@ -15,6 +15,7 @@ SOVA is an Electron desktop app for the DEV Presage SmartSpectra SDK Challenge: 
 | Check-in start path | `npm run smoke:checkin` |
 | Regenerate state docs | `npm run docs:machines` |
 | Windows installer | `npm run dist:win` |
+| Mac disk image (Apple Silicon, on a Mac) | `npm run dist:mac` |
 
 Smoke screenshots: set `SOVA_SMOKE_SHOTS=/some/folder`, and `SOVA_SMOKE_THEME=light` or `dark`.
 

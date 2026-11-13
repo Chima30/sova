@@ -8,6 +8,14 @@
 
 Requires Windows 10 or 11, 64-bit, and a webcam. Live readings need an internet connection.
 
+## Install SOVA on Mac (Apple Silicon)
+
+1. Download **SOVA-0.5.0-mac-arm64.dmg** below, open it and drag SOVA to Applications.
+2. SOVA is not notarized by Apple yet, so the first time, right-click SOVA in Applications, choose **Open**, then **Open** again. On macOS 15 or later, if there is no Open button: try to open it once, then go to System Settings › Privacy & Security and choose **Open Anyway**.
+3. Accept the camera consent, allow camera access when macOS asks, then paste your free Presage API key in **Settings**.
+
+Requires a Mac with Apple Silicon (M1 or later) and a camera. Live readings need an internet connection.
+
 ## What's in this version
 
 New in 0.5.0:

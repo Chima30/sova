@@ -40,7 +40,7 @@ SOVA uses `@smartspectra/node-sdk` 3.4.0 for every live signal.
 
 You need a webcam and a free [Presage API key](https://physiology.presagetech.com/auth/register).
 
-1. Install: download **SOVA-Setup.exe** from the [latest release](https://github.com/Chima30/sova/releases/latest) (Windows SmartScreen may warn because it isn't code-signed yet: **More info**, then **Run anyway**), or run from source with `npm install` then `npm run demo`.
+1. Install from the [latest release](https://github.com/Chima30/sova/releases/latest): **SOVA-Setup.exe** for Windows, or the **.dmg** for a Mac with Apple Silicon. Neither is code-signed yet, so the first launch needs one extra click (see Install below). Or run from source with `npm install` then `npm run demo`.
 2. Accept the camera consent and paste your API key in **Settings**.
 3. Open **Focus**, pick a preset and press **Start**. Follow the signal check tips until the dot turns orange, then start the session.
 4. Sit naturally while SOVA learns your baseline (2 minutes, or 40 seconds with `npm run demo`).
@@ -145,7 +145,13 @@ SOVA calls the SDK's `requestInsight` only when the user has turned on AI reflec
 3. Open SOVA, accept the camera consent, and paste your free [Presage API key](https://physiology.presagetech.com/auth/register) in **Settings**.
 4. Make sure Windows lets desktop apps use the camera: Settings › Privacy & security › Camera › **Let desktop apps access your camera**.
 
-Every push to `main` also builds the installer automatically with GitHub Actions ([workflow](.github/workflows/windows-installer.yml)).
+**Install on Mac (Apple Silicon)**
+
+1. Download **SOVA-…-mac-arm64.dmg** from the [latest release](https://github.com/Chima30/sova/releases/latest), open it and drag SOVA to Applications.
+2. The app is not notarized by Apple yet, so the first time, right-click SOVA in Applications and choose **Open**, then **Open** again. On macOS 15 or later, if there is no Open button: try to open it once, then go to System Settings › Privacy & Security and choose **Open Anyway**.
+3. Accept the camera consent in SOVA, and allow camera access when macOS asks. Paste your free [Presage API key](https://physiology.presagetech.com/auth/register) in **Settings**.
+
+Every push to `main` builds both installers automatically with GitHub Actions ([workflow](.github/workflows/windows-installer.yml)).
 
 **Requirements**
 
@@ -178,7 +184,7 @@ $env:SOVA_PRESAGE_API_KEY="your-key"
 
 ```bash
 npm run dist:win     # Windows installer in release/ (also built by GitHub Actions)
-npm run dist:mac     # macOS (Apple Silicon)
+npm run dist:mac     # macOS (Apple Silicon), on a Mac (also built by GitHub Actions)
 npm run dist:linux   # Linux AppImage
 ```
 

@@ -43,7 +43,7 @@ const ERROR_TEXT = {
   4: 'Your Presage credits are used up. Live readings are paused.',
   5: 'No connection to Presage. SOVA will keep running as a plain timer.',
   6: 'Presage service error. Try again in a moment.',
-  7: 'Camera unavailable. Close other apps using it, and check that Windows lets desktop apps use the camera.',
+  7: 'Camera unavailable. Close other apps using it, and check that SOVA may use the camera in your system privacy settings (Windows: Let desktop apps access your camera; Mac: Privacy & Security › Camera).',
   8: 'SmartSpectra processing stopped.',
 };
 

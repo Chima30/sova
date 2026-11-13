@@ -61,7 +61,8 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
-        "NSCameraUsageDescription": "SOVA uses the camera during focus sessions to estimate breathing, pulse and HRV on this device. No video is saved."
+        "NSCameraUsageDescription": "SOVA uses the camera during focus sessions to estimate breathing, pulse and HRV on this device. No video is saved.",
+        "NSMicrophoneUsageDescription": "SOVA uses the microphone only if you turn on breath sound analysis, during a breathing reset, to time your breaths. Audio is never recorded or saved."
       },
       "extraResources": [
         {
@@ -69,7 +70,16 @@
           "to": "smartspectra"
         }
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "SOVA-${version}-mac-${arch}.${ext}"
     },
     "win": {
       "target": [

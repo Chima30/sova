@@ -9,7 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const {
   app, BrowserWindow, session, ipcMain, dialog, powerMonitor,
-  globalShortcut, safeStorage, shell, screen, clipboard, nativeImage,
+  globalShortcut, safeStorage, shell, screen, clipboard, nativeImage, systemPreferences,
 } = require('electron');
 
 // Packaged builds load the native runtime from resources/smartspectra/,
@@ -257,9 +257,14 @@ function registerIpc() {
       return { ok: false, code: e && e.code, message: (e && e.message) || String(e), retryable: !!(e && e.retryable) };
     }
   };
-  handle('sova:native:start', (opts) => safe(() => {
+  handle('sova:native:start', (opts) => safe(async () => {
     const apiKey = readApiKey();
     if (!apiKey) return { ok: false, code: 2, message: 'No API key' };
+    // macOS asks the person once for camera access before the SDK opens it.
+    if (process.platform === 'darwin' && systemPreferences.getMediaAccessStatus('camera') !== 'granted') {
+      const allowed = await systemPreferences.askForMediaAccess('camera');
+      if (!allowed) return { ok: false, code: 7, message: 'Camera access is off for SOVA. Turn it on in System Settings › Privacy & Security › Camera.' };
+    }
     return native.start({ apiKey, telemetry: !!(opts && opts.telemetry), size: opts && opts.size, cameraId: opts && opts.cameraId });
   }));
   handle('sova:native:stop', () => safe(() => native.stop()));
