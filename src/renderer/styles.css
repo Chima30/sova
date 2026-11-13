@@ -550,3 +550,32 @@ button.row-item:hover .row-aside .icon { transform: translateX(3px); }
 .trend-dot { fill: var(--surface-solid); stroke: var(--accent); stroke-width: 2; }
 .trend-empty { min-height: 120px; display: flex; align-items: center; }
 .t-section .icon { display: inline-block; vertical-align: -3px; margin-right: 6px; color: var(--lavender); }
+
+/* ---- rising embers behind every page -------------------------------------- */
+.embers { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 0; }
+.app { position: relative; z-index: 1; }
+.splash { z-index: 60; }
+
+/* ---- session story card ------------------------------------------------------ */
+.story-canvas { width: 100%; max-width: 760px; height: auto; aspect-ratio: 1040 / 600; display: block; border-radius: 24px; box-shadow: var(--shadow); }
+
+/* ---- live breath in the session pill -------------------------------------- */
+.pill-wave { width: 96px; height: 24px; flex: none; }
+.pill-wave path { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; transition: stroke var(--t-theme) var(--ease); }
+.session-pill.breathing .pill-wave path { stroke: var(--accent); }
+.pill-rate { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.session-pill.breathing .pill-rate { font-family: var(--mono); color: var(--accent-text); }
+
+/* ---- Today rings on Home ----------------------------------------------------- */
+.today { display: grid; grid-template-columns: minmax(150px, 210px) minmax(0, 1fr); gap: 20px; align-items: center; }
+.today-rings { width: 100%; height: auto; display: block; }
+.ring-track { fill: none; stroke: var(--raised-2); stroke-width: 14; }
+.ring-fill { fill: none; stroke-width: 14; stroke-linecap: round; transition: stroke-dashoffset 900ms var(--ease); }
+.ring-focus { stroke: var(--text); }
+.ring-breaks { stroke: var(--lavender); }
+.ring-recovery { stroke: var(--rose); }
+.view [style*="--i"] .ring-fill { animation: ring-in 1200ms var(--ease) both; animation-delay: calc(var(--i, 0) * 60ms + 200ms); }
+@keyframes ring-in { from { stroke-dashoffset: var(--c); } to { stroke-dashoffset: var(--off); } }
+.today-big { font: 300 34px var(--font); fill: var(--text); letter-spacing: -0.02em; }
+.today-small { font: 400 13px var(--font); fill: var(--text-2); }
+@media (max-width: 1180px) { .today { grid-template-columns: 180px minmax(0, 1fr); } }

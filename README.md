@@ -68,6 +68,10 @@ For the quickest look at live SDK signals, press **Start 60-second check-in** on
 - "What SOVA sees": the live values leaving the SDK, with confidence and why any value is held back, computed on this computer with no video saved
 - Your check-ins over the last 14 days in Insights, one point per day, with your own usual range shaded
 - "Your data stays on this computer" on Home, with export and a confirmed "Forget everything"
+- A session story card at the end of each session: focus time, resets and breathing before → after your last reset, drawn over your last steady breath waveform. Save it as a PNG or copy it
+- Live breath in the session pill: a small breath line and your rate at the top right, from any page, grey with "No steady signal" when the reading isn't usable
+- Today rings on Home: focus against your plan, breaks taken, and resets plus eye rests, with no score
+- Soft rising embers behind every page (decorative, no data; still with reduced motion)
 - A 3D heart that swells with your breath and beats at your measured pulse, only while each reading is usable
 
 **Focus**
@@ -191,6 +195,7 @@ In short:
 - **Sent to Presage.** Your API key authenticates each session. While measuring, the SDK itself sends derived vitals (pulse, HRV, breathing rate, no video or images) to Presage for its built-in AI check-ins. SOVA can't turn that off and doesn't show them.
 - **Stored.** Only on your computer: session summaries, baselines, check-ins, reflections, settings and your local profile. Your API key is encrypted with the operating system's secure storage. Nothing goes to any other party, with no accounts and no analytics.
 - **Retention and deletion.** Kept until you delete it. **Settings › Delete all data** removes everything, and you can export it as CSV or JSON.
+- **Session card.** The breath waveform on the card is kept in memory only while the summary is open, never stored. The card image is written only where you choose to save it, or copied to your clipboard when you press Copy.
 - **SDK telemetry.** Off by default. If you opt in, it sends an aggregate diagnostics summary with no video, values or identifiers.
 - **Optional AI and microphone.** Both are off by default, each with its own consent. AI reflections use Presage's `requestInsight`; breath sound analysis never records audio.
 - **Not medical.** No diagnosis or treatment claims, no stress score, not for medical decisions.

@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('sova', {
   dataSummary: invoke('sova:data:summary'),
   exportData: invoke('sova:data:export'),
   deleteAll: invoke('sova:data:delete-all'),
+  saveCard: invoke('sova:card:save'),
+  copyCard: invoke('sova:card:copy'),
   idleSeconds: invoke('sova:system:idle'),
   appInfo: invoke('sova:app:info'),
   native: {

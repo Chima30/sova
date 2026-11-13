@@ -9,7 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const {
   app, BrowserWindow, session, ipcMain, dialog, powerMonitor,
-  globalShortcut, safeStorage, shell, screen,
+  globalShortcut, safeStorage, shell, screen, clipboard, nativeImage,
 } = require('electron');
 
 // Packaged builds load the native runtime from resources/smartspectra/,
@@ -218,6 +218,31 @@ function registerIpc() {
   });
 
   handle('sova:data:delete-all', () => { store.deleteAll(); return { ok: true }; });
+
+  // The session story card as a PNG, only where the user chooses, or to the
+  // clipboard. Nothing is kept by SOVA.
+  const pngFrom = (dataUrl) => {
+    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png;base64,')) return null;
+    return Buffer.from(dataUrl.slice('data:image/png;base64,'.length), 'base64');
+  };
+  handle('sova:card:save', async (dataUrl, name) => {
+    const png = pngFrom(dataUrl);
+    if (!png) return { ok: false };
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: 'Save session card',
+      defaultPath: typeof name === 'string' && /^[\w .-]{1,80}\.png$/.test(name) ? name : 'sova-session.png',
+      filters: [{ name: 'PNG image', extensions: ['png'] }],
+    });
+    if (canceled || !filePath) return { ok: false };
+    fs.writeFileSync(filePath, png);
+    return { ok: true, filePath };
+  });
+  handle('sova:card:copy', (dataUrl) => {
+    const png = pngFrom(dataUrl);
+    if (!png) return { ok: false };
+    clipboard.writeImage(nativeImage.createFromBuffer(png));
+    return { ok: true };
+  });
 
   // Seconds since the last keyboard or mouse input anywhere on the system.
   // Used only to wait for a pause in typing before showing a cue.

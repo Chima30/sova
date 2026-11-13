@@ -914,6 +914,12 @@ class LiveSession {
     const live = this.mode === 'live' && !this.cameraPaused && this.breathingUsable();
     const level = live ? levelFromTrace(this.recentTrace(12)) : null;
     this.lines.setLive(level);
+    // For the story card: the latest 20 s of waveform from a moment when
+    // breathing was usable. Kept in memory only, never saved.
+    if (level != null && now() - (this.storyAt || 0) > 2) {
+      const pts = this.recentTrace(20).map((p) => p.value);
+      if (pts.length >= 20) { this.storyTrace = pts; this.storyAt = now(); }
+    }
     if (this.orb) {
       // The heart swells with a usable breath and beats at a usable pulse.
       // With only a pulse it holds still between beats; with neither it

@@ -118,6 +118,9 @@ app.whenReady().then(async () => {
     report.homeDataCard = await run(`!!document.getElementById('h-forget') && !!document.getElementById('h-export')`);
     await run(`document.getElementById('h-forget').scrollIntoView({ block: 'center' })`);
     await shot(win, 'home-data.png');
+    report.todayRings = await run(`(document.querySelector('.today-rings') || {}).getAttribute ? document.querySelector('.today-rings').getAttribute('aria-label') : 'missing'`);
+    await run(`document.querySelector('.today').scrollIntoView({ block: 'center' })`);
+    await shot(win, 'home-today.png');
     await run(`document.querySelector('[data-nav="settings"]').click()`);
     await wait(500);
     await run(`document.querySelector('details').open = true; document.querySelector('details').scrollIntoView()`);
@@ -158,6 +161,9 @@ app.whenReady().then(async () => {
     await shot(win, 'summary.png');
     report.summaryFeeling = await run(`(document.querySelector('#view .page-head .t-small') || {}).textContent || 'missing'`);
     report.summary = await run(`document.querySelector('#view h1').textContent + ' | timeline: ' + !!document.querySelector('#view [role=img]')`);
+    report.storyCard = await run(`(() => { const c = document.querySelector('.story-canvas'); return c ? c.width + 'x' + c.height + ' | ' + c.getAttribute('aria-label') : 'missing'; })()`);
+    await run(`document.querySelector('.story-canvas').scrollIntoView({ block: 'center' })`);
+    await shot(win, 'summary-card.png');
     report.widgetClosed = !BrowserWindow.getAllWindows().some((w) => w.webContents.getURL().includes('widget.html'));
 
     // Mic breath analysis on, no microphone in this environment: honest result screen.

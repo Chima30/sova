@@ -15,6 +15,8 @@ const { BreathLines, mark } = require('./breathLines');
 const { BreathOrb } = require('./breathOrb');
 const ci = require('../../shared/core/checkIns');
 const motion = require('./motion');
+const { startEmbers } = require('./embers');
+const { storyCard } = require('./storyCard');
 const { icon } = require('./icons');
 const { formatClock } = require('../../shared/core/sessionEngine');
 const { CheckIn, renderResults } = require('./checkin');
@@ -73,6 +75,7 @@ async function boot() {
   state.selectedPreset = state.settings.presetId;
   state.resetSeconds = state.config.defaultBreathingSeconds;
   applyMotion();
+  startEmbers({ reduced: reducedMotion });
 
   const info = await window.sova.appInfo();
   state.mod = info.platform === 'darwin' ? 'Cmd' : 'Ctrl';
@@ -204,11 +207,13 @@ function updateTopbar() {
     if (pill) {
       pill.querySelector('.dot').className = `dot ${live ? 'live' : 'off'}`;
       pill.querySelector('.mono').textContent = text;
+      updatePillBreath();
       return;
     }
     delete box.dataset.html;
-    box.innerHTML = `<button class="session-pill" id="pill" aria-label="Back to the running session"><span class="dot ${live ? 'live' : 'off'}"></span><span>${esc(s.preset.name)}</span><span class="mono">${text}</span></button>`;
+    box.innerHTML = `<button class="session-pill" id="pill" aria-label="Back to the running session"><span class="dot ${live ? 'live' : 'off'}"></span><span>${esc(s.preset.name)}</span><span class="mono">${text}</span>${s.mode === 'live' ? '<svg class="pill-wave" viewBox="0 0 96 24" aria-hidden="true"><path d="M0 12H96"/></svg><span class="pill-rate"></span>' : ''}</button>`;
     $('#pill').addEventListener('click', () => go('focus'));
+    updatePillBreath();
     return;
   }
   const off = !navigator.onLine;
@@ -227,6 +232,38 @@ function updateTopbar() {
     <span class="row" style="gap: 4px" title="Quick breathing reset from anywhere"><span class="keycap">${state.mod}</span><span class="keycap">Shift</span><span class="keycap">B</span></span>`;
   if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
 }
+
+// The live breath in the session pill: the last 12 s of the breathing
+// waveform and the rate, only while breathing is usable. Otherwise a flat
+// grey line and the reason.
+function updatePillBreath() {
+  const pill = $('#pill');
+  const path = pill && pill.querySelector('.pill-wave path');
+  if (!path) return;
+  const s = liveSession();
+  const rate = pill.querySelector('.pill-rate');
+  const usable = s && s.mode === 'live' && !s.cameraPaused && s.breathingUsable();
+  const pts = usable ? s.recentTrace(12).map((p) => p.value) : [];
+  if (!usable || pts.length < 4) {
+    pill.classList.remove('breathing');
+    path.setAttribute('d', 'M0 12H96');
+    rate.textContent = s && s.cameraPaused ? 'Camera paused' : 'No steady signal';
+    return;
+  }
+  const lo = Math.min(...pts), hi = Math.max(...pts);
+  const step = Math.max(1, Math.floor(pts.length / 48));
+  const d = [];
+  for (let i = 0; i < pts.length; i += step) {
+    const x = (i / (pts.length - 1)) * 96;
+    const y = hi - lo > 0 ? 20 - ((pts[i] - lo) / (hi - lo)) * 16 : 12;
+    d.push(`${d.length ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`);
+  }
+  path.setAttribute('d', d.join(''));
+  pill.classList.add('breathing');
+  const br = s.usableSnapshot().breathing;
+  rate.textContent = br != null ? `${Math.round(br)} /min` : '';
+}
+setInterval(updatePillBreath, 250);
 
 // ---------------------------------------------------------------------------
 // Small building blocks
@@ -510,7 +547,13 @@ async function startSession() {
     preset,
     apiKey,
     checkIn: recentCheckIn(),
-    onEnd: (record) => { state.session = null; showReflection(record); },
+    onEnd: (record) => {
+      // The last steady breath waveform, kept in memory for the story card only.
+      const s = state.session;
+      state.storyTrace = s && s.storyTrace && s.storyTrace.length ? { id: record.id, points: s.storyTrace } : null;
+      state.session = null;
+      showReflection(record);
+    },
   });
   state.session.onScreen = true;
   await state.session.begin();
@@ -538,11 +581,40 @@ function lastValues(c) {
     .map(([l, x, u]) => [l, Math.round(x), u]);
 }
 
-// Focus time as a big figure: minutes, or hours and minutes. Counts up.
-function focusFigure(seconds) {
-  const m = Math.round((seconds || 0) / 60);
-  if (m < 60) return `<div class="tile-figure"><span class="value" data-count="${m}">${m}</span><span class="unit">min</span></div>`;
-  return `<div class="tile-figure"><span class="value" data-count="${Math.floor(m / 60)}">${Math.floor(m / 60)}</span><span class="unit">h</span><span class="value" data-count="${m % 60}">${m % 60}</span><span class="unit">min</span></div>`;
+// Today as three soft rings: focus against the plan, breaks taken, and
+// resets plus eye rests. Counts from the stored sessions only; no score.
+function todayRings({ today, preset, focusToday, resetsToday, eyesToday, checksToday }) {
+  const focusMin = Math.round(focusToday / 60);
+  // The plan: today's sessions as planned, or the next session if none yet.
+  const planMin = today.length
+    ? today.reduce((n, x) => n + (x.blocksPlanned || 0) * ((presetById(x.presetId) || preset).focusMinutes || 0), 0)
+    : preset.blocks * preset.focusMinutes;
+  const breaksPlanned = today.reduce((n, x) => n + Math.max(0, (x.blocksPlanned || 0) - 1), 0);
+  const breaksTaken = Math.max(0, today.reduce((n, x) => n + countEvents(x, 'break-start') - countEvents(x, 'break-skipped'), 0));
+  const recovery = resetsToday + eyesToday;
+  const frac = (a, b) => (b > 0 ? Math.max(0, Math.min(1, a / b)) : 0);
+  const rings = [
+    { r: 120, f: frac(focusMin, planMin), cls: 'ring-focus' },
+    { r: 95, f: frac(breaksTaken, breaksPlanned), cls: 'ring-breaks' },
+    { r: 70, f: Math.min(1, recovery / 4), cls: 'ring-recovery' },
+  ];
+  const C = (r) => 2 * Math.PI * r;
+  const hm = focusMin < 60 ? `${focusMin} min` : `${Math.floor(focusMin / 60)}h ${String(focusMin % 60).padStart(2, '0')}m`;
+  return `<section class="panel today" aria-labelledby="today-title">
+    <svg class="today-rings" viewBox="0 0 300 300" role="img" aria-label="Today: ${focusMin} of ${planMin} minutes of focus, ${breaksTaken} of ${breaksPlanned} breaks taken, ${recovery} resets and eye rests">
+      ${rings.map((x) => `<circle cx="150" cy="150" r="${x.r}" class="ring-track"/>
+        <circle cx="150" cy="150" r="${x.r}" class="ring-fill ${x.cls}" style="--c: ${C(x.r).toFixed(1)}; --off: ${(C(x.r) * (1 - x.f)).toFixed(1)}" stroke-dasharray="${C(x.r).toFixed(1)}" stroke-dashoffset="${(C(x.r) * (1 - x.f)).toFixed(1)}" transform="rotate(-90 150 150)"/>`).join('')}
+      <text x="150" y="150" text-anchor="middle" class="today-big">${hm}</text>
+      <text x="150" y="176" text-anchor="middle" class="today-small">focused today</text>
+    </svg>
+    <div class="stack-8">
+      <h2 class="t-section" id="today-title">Today</h2>
+      <span class="status"><span class="dot" style="background: var(--text)"></span>Focus · ${focusMin} of ${planMin} min planned</span>
+      <span class="status"><span class="dot" style="background: var(--lavender)"></span>Breaks taken · ${breaksPlanned ? `${breaksTaken} of ${breaksPlanned}` : 'none yet'}</span>
+      <span class="status"><span class="dot" style="background: var(--rose)"></span>Resets and eye rests · ${recovery}</span>
+      <span class="t-small">${checksToday} check-in${checksToday === 1 ? '' : 's'} · ${today.length} session${today.length === 1 ? '' : 's'} · no streaks, rest days count too</span>
+    </div>
+  </section>`;
 }
 
 async function startCheckIn() {
@@ -732,6 +804,10 @@ function showSummary(record) {
         ${stat('Resets taken', resets.length)}
         ${stat('Eye rests taken', countEvents(record, 'eye-rest'))}
       </div>
+      <section class="panel stack story">
+        <div class="panel-head" style="margin-bottom: 0"><h2 class="t-section">Your session card</h2><span class="t-meta">Save it or share it. SOVA keeps no copy</span></div>
+        <div class="stack" id="story-card"></div>
+      </section>
       <section class="panel"><div class="panel-head"><h2 class="t-section">Timeline</h2></div>${renderTimeline(record)}</section>
       <div class="grid-2">
         <section class="panel">
@@ -753,6 +829,8 @@ function showSummary(record) {
     </div>`;
   $('#again').addEventListener('click', () => go('focus'));
   $('#hist').addEventListener('click', () => go('history'));
+  const trace = state.storyTrace && state.storyTrace.id === record.id ? state.storyTrace.points : null;
+  storyCard($('#story-card'), record, trace);
 }
 
 // Sessions grouped by the feeling you reported before starting. Counts only.
@@ -839,12 +917,7 @@ const VIEWS = {
               <span class="t-small">${cameraAllowed() && s.hasApiKey ? 'A short signal check runs first, then SOVA learns your baseline for 2 minutes.' : 'Runs as a plain timer with time-based eye-rest reminders.'}</span>
               <div class="row"><button class="btn btn-primary btn-lg" id="h-start">${icon('play', 18)}Start ${esc(preset.name)}</button></div>
             </section>
-            <div class="tiles" aria-label="Today">
-              <div class="tile dark"><span class="tile-label">Focus today ${icon('timer', 16)}</span>${focusFigure(focusToday)}</div>
-              <div class="tile"><span class="tile-label">Resets ${icon('wind', 16)}</span><div class="tile-figure"><span class="value" data-count="${resetsToday}">${resetsToday}</span></div></div>
-              <div class="tile"><span class="tile-label">Eye rests ${icon('eye', 16)}</span><div class="tile-figure"><span class="value" data-count="${eyesToday}">${eyesToday}</span></div></div>
-              <div class="tile"><span class="tile-label">Check-ins ${icon('activity', 16)}</span><div class="tile-figure"><span class="value" data-count="${checksToday}">${checksToday}</span><span class="unit">${today.length} session${today.length === 1 ? '' : 's'}</span></div></div>
-            </div>
+            ${todayRings({ today, preset, focusToday, resetsToday, eyesToday, checksToday })}
           </div>
         </div>
         <section class="panel stack">
