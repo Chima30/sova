@@ -11,9 +11,9 @@ You're 40 minutes into deep work. Your breathing has crept up and you haven't no
 3. **You breathe with the guide.** Your own breath, read live from the camera, is drawn in orange against the lavender pace to follow.
 4. **It shows you what changed.** A minute later it puts the before and after side by side, for example *Breathing 19 → 14 breaths/min*. Your own numbers, with no score and no verdict.
 
-![SOVA noticing faster breathing during focus, suggesting a reset, and showing breathing before and after](docs/media/sova-moment.gif)
+![A live SOVA focus session: breathing 12 breaths/min and pulse 74 bpm read from the camera, with the breath line and the heart moving with them](docs/media/sova-live.gif)
 
-*Recorded with real camera readings. To fit the moment in a short clip it uses demo timing (`npm run demo`): a 40-second baseline instead of 2 minutes, and a 40-second tension window instead of 3.*
+*A live focus session, recorded with real camera readings: breathing and pulse from the SmartSpectra SDK, the breath line following the breathing waveform, and the heart beating at the measured pulse. Recorded with demo timing (`npm run demo`), which only shortens the baseline and cue waits.*
 
 SOVA is not a medical application, diagnostic tool, stress detector or productivity surveillance system. It is a personal focus and self-reflection companion. Built for the DEV Presage SmartSpectra SDK Challenge (#presagechallenge).
 
