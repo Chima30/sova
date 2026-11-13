@@ -2,6 +2,16 @@
 
 **Stay in focus. Stay in tune.** A focus timer that notices your breathing before you do, using your webcam and Presage's [SmartSpectra SDK](https://smartspectra.presagetech.com/docs).
 
+## Why I built it
+
+I study and code for long stretches, staring at the screen the whole time. I don't notice it while it's happening. I notice afterwards, when the headache starts.
+
+A timer only knows the time, not me. A breathing app only helps if I remember to open it in the middle of a problem, which is exactly when I won't. I wanted something that notices for me.
+
+My webcam is already pointed at me while I work. With Presage's SmartSpectra SDK it can read my breathing, pulse, HRV and blinking, on my own computer, with no video saved. So SOVA learns my own baseline, notices when my breathing stays faster than usual or my blinking drops, waits for a pause in my typing, and suggests a short breathing reset or an eye rest. Then it shows me whether the reset changed anything.
+
+SOVA doesn't diagnose or treat anything, headaches included. It helps me notice, and take the break I would have skipped.
+
 ## The moment
 
 You're 40 minutes into deep work. Your breathing has crept up and you haven't noticed.
