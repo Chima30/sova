@@ -180,8 +180,19 @@ Packaging follows Presage's guide: the platform runtime folder is copied to `res
 
 ## Consent and data handling
 
+In short:
+
+- **Consent first.** The camera stays off until you agree on the consent screen. "Not now" keeps SOVA as a plain timer.
+- **Camera only when you start it.** The camera runs only during a check-in, focus session or reset that you start. "Camera on" and **Pause camera** are always visible. Video is never recorded, saved or uploaded; the SDK computes signals on your computer.
+- **Sent to Presage.** Your API key authenticates each session. While measuring, the SDK itself sends derived vitals (pulse, HRV, breathing rate, no video or images) to Presage for its built-in AI check-ins. SOVA can't turn that off and doesn't show them.
+- **Stored.** Only on your computer: session summaries, baselines, check-ins, reflections, settings and your local profile. Your API key is encrypted with the operating system's secure storage. Nothing goes to any other party, with no accounts and no analytics.
+- **Retention and deletion.** Kept until you delete it. **Settings › Delete all data** removes everything, and you can export it as CSV or JSON.
+- **SDK telemetry.** Off by default. If you opt in, it sends an aggregate diagnostics summary with no video, values or identifiers.
+- **Optional AI and microphone.** Both are off by default, each with its own consent. AI reflections use Presage's `requestInsight`; breath sound analysis never records audio.
+- **Not medical.** No diagnosis or treatment claims, no stress score, not for medical decisions.
+
 <details>
-<summary><strong>What the camera, microphone and AI features do with your data</strong></summary>
+<summary><strong>Full details: camera, processing, storage, telemetry, microphone and AI</strong></summary>
 
 **Camera consent**
 - On first launch SOVA shows a consent screen explaining what the camera is used for, what is stored and what goes to Presage. Live readings start only after the user ticks "I understand and agree" and chooses "Allow camera". Choosing "Not now" keeps SOVA as a plain focus timer with the camera off.
