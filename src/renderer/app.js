@@ -211,7 +211,7 @@ function updateTopbar() {
       return;
     }
     delete box.dataset.html;
-    box.innerHTML = `<button class="session-pill" id="pill" aria-label="Back to the running session"><span class="dot ${live ? 'live' : 'off'}"></span><span>${esc(s.preset.name)}</span><span class="mono">${text}</span>${s.mode === 'live' ? '<svg class="pill-wave" viewBox="0 0 96 24" aria-hidden="true"><path d="M0 12H96"/></svg><span class="pill-rate"></span>' : ''}</button>`;
+    box.innerHTML = `<button class="session-pill" id="pill"><span class="sr-only">Back to the running session: </span><span class="dot ${live ? 'live' : 'off'}"></span><span>${esc(s.preset.name)}</span><span class="mono">${text}</span>${s.mode === 'live' ? '<svg class="pill-wave" viewBox="0 0 96 24" aria-hidden="true"><path d="M0 12H96"/></svg><span class="pill-rate"></span>' : ''}</button>`;
     $('#pill').addEventListener('click', () => go('focus'));
     updatePillBreath();
     return;
@@ -262,6 +262,7 @@ function updatePillBreath() {
   pill.classList.add('breathing');
   const br = s.usableSnapshot().breathing;
   rate.textContent = br != null ? `${Math.round(br)} /min` : '';
+  rate.setAttribute('aria-label', br != null ? `breathing ${Math.round(br)} per minute` : '');
 }
 setInterval(updatePillBreath, 250);
 

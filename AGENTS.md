@@ -9,7 +9,7 @@ SOVA is an Electron desktop app for the DEV Presage SmartSpectra SDK Challenge: 
 | Task | Command |
 | --- | --- |
 | Run the app | `npm start` (builds first) |
-| Run with demo timing (for recording) | `npm run demo`: 40 s baseline and tension window, after value 30 s after a reset; readings unchanged |
+| Run with demo timing (for recording) | `npm run demo`: 40 s baseline and tension window, after value 30 s after a reset, no automatic meeting snooze; readings unchanged |
 | Unit tests | `npm test` |
 | Click-through test of every screen | `npm run smoke` (on Linux: `xvfb-run -a npm run smoke`) |
 | Check-in start path | `npm run smoke:checkin` |

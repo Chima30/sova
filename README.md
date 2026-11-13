@@ -266,4 +266,4 @@ The shared core holds every rule (confidence gating, baseline, cue timing, adapt
 
 ## License
 
-All rights reserved by the author until a license is chosen. The Presage SDK is used under Presage's license.
+SOVA's own code is released under the [MIT License](LICENSE). The Presage SmartSpectra SDK (`@smartspectra/node-sdk`) is not covered by it: it is used under Presage's own license and terms, and needs your own Presage API key.

@@ -42,6 +42,9 @@ class LiveSession {
     const eff = applyOverrides(config, preset, settings.cueOverrides);
     config = eff.config;
     preset = eff.preset;
+    // Demo timing: no automatic meeting snooze, so talking while recording
+    // can't hold the cue back. The Meeting button still works by hand.
+    if (config.demoTiming) config.smartPauses.autoMeeting = false;
     this.config = config;
     this.settings = settings;
     this.preset = preset;
@@ -806,7 +809,7 @@ class LiveSession {
       <div class="page-head">
         <div><p class="t-small" id="block-label"></p><h1 class="t-title">${esc(this.preset.name)}</h1></div>
         <div class="row">
-          ${this.config.demoTiming ? '<span class="state-chip" title="Shorter baseline and cue timing for a demo recording. Readings are real.">Demo timing</span>' : ''}
+          ${this.config.demoTiming ? '<span class="state-chip" title="Shorter baseline and cue timing, and no automatic meeting snooze, for a demo recording. Readings are real.">Demo timing</span>' : ''}
           ${live ? `<span class="status"><span class="dot live" id="cam-dot"></span><span id="cam-text">Camera on</span></span>
           <button class="btn btn-quiet" id="cam-toggle">${icon(this.cameraPaused ? 'camera' : 'camera-off', 16)}<span>${this.cameraPaused ? 'Resume camera' : 'Pause camera'}</span></button>` : ''}
         </div>
