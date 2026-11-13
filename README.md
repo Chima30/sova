@@ -8,6 +8,10 @@ I study and code for hours, staring at the screen, and I only notice the strain 
 
 Timers only know the time, and breathing apps only help if you remember to open them. SOVA uses the webcam you already have to notice for you: it learns your own baseline, suggests a short reset or eye rest when your breathing or blinking drifts, and shows whether it helped. It doesn't diagnose or treat anything; it helps you take the break you would have skipped.
 
+## The problem
+
+During long screen work your breathing can speed up, your blinking slows and breaks get skipped, and you rarely notice until you're drained or the headache starts.
+
 ## The moment
 
 You're 40 minutes into deep work. Your breathing has crept up and you haven't noticed.
