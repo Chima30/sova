@@ -1,18 +1,18 @@
 # SOVA
 
-**Stay in focus. Stay in tune.**
+When I spend hours studying or coding, I often don't notice my breathing getting faster or how long I've gone without a break until I'm already tired.
 
-SOVA is a desktop focus and recovery app that uses your webcam and [Presage SmartSpectra](https://smartspectra.presagetech.com/docs) to track breathing, pulse and HRV while you work. It learns your own baseline, suggests a break when reliable readings show a sustained change, and lets you compare measurements before and after a reset.
+I built **SOVA** to help with that. It's a desktop focus app that uses your webcam and [Presage's SmartSpectra SDK](https://smartspectra.presagetech.com/docs) to measure breathing, pulse and heart rate variability (HRV) while you work. It learns your baseline, suggests a short reset when reliable readings show a lasting change, and compares your measurements before and after.
 
-**[Watch the demo](https://www.youtube.com/watch?v=zsqQYHev2NM)** · **[Download SOVA](https://github.com/Chima30/sova/releases/latest)** · **[Read the DEV submission](https://dev.to/challenges/presage-2026-11-04)**
+![A live SOVA focus session, showing the breathing waveform and pulse-driven heart](docs/media/sova-live.gif)
 
-![SOVA running a live focus session, with its breathing waveform and pulse-driven heart](docs/media/sova-live.gif)
+*Live camera measurements from SmartSpectra. The heart beats at the measured pulse, and the orange line follows the breathing signal. Recorded with `npm run demo`, which shortens waiting periods without faking readings.*
 
-*Real SmartSpectra camera readings in SOVA. The heart follows the measured pulse and the orange line follows the breathing signal. This clip uses `npm run demo`, which shortens waiting periods but does not simulate measurements.*
+**[Watch the demo](https://www.youtube.com/watch?v=zsqQYHev2NM)** · **[Get SOVA](https://github.com/Chima30/sova/releases/latest)**
 
-## Why I built it
+## Inspiration
 
-I can spend hours studying or coding and only notice how tired I am when I stop. A timer knows how long I've worked, but not whether I've been sitting there breathing faster than usual or skipping breaks. I wanted something that could help me notice without constantly interrupting me.
+A regular timer tells me when to stop, but it can't tell whether I've been breathing faster than usual or missing breaks. Breathing apps can help, but I have to remember to open them. I wanted SOVA to notice a sustained change while I'm working and offer a break without getting in the way.
 
 Here's the moment SOVA is built for:
 
